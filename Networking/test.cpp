@@ -1,3 +1,4 @@
+//cl /EHsc .\test.cpp /link /OUT:test.exe
 #include <windows.h>
 #include <iostream>
 #include <vector>
@@ -55,13 +56,14 @@ int main()
     // send_data("target_data.rat", "6!!!!!!!!!!!!!!!!!!!!!!!0");
     // Sleep(500);
 
-    // std::cout << receive_data("target_data.rat") << std::endl;
+    // std::cout << receive_data("target_data.rat") << std::endl << std::endl;
     // Sleep(1000);
 
     a = receive_data_raw("target_data.rat");
     for(unsigned char c : a) std::cout << c;
-    Sleep(5000);
-    std::cout << "!!" << receive_data("target_data.rat") << std::endl;
+    //Sleep(5000);
+    // std::cout << std::endl;
+    // std::cout << receive_data("target_data.rat") << std::endl;
 
     return 0;
 }

