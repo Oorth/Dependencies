@@ -53,17 +53,17 @@ int main()
     load_dll();
     std::vector <unsigned char> a;
 
-    // send_data("target_data.rat", "6!!!!!!!!!!!!!!!!!!!!!!!0");
-    // Sleep(500);
+    send_data("target_data.rat", "8!!!!!!!!!!!!!!!!!!!!!!!0");
+    std::cout << "Sent data" << std::endl;
 
-    // std::cout << receive_data("target_data.rat") << std::endl << std::endl;
-    // Sleep(1000);
+    std::cout << "1) "<< receive_data("target_data.rat") << std::endl;
 
     a = receive_data_raw("target_data.rat");
+    std::cout << "2) ";
     for(unsigned char c : a) std::cout << c;
     //Sleep(5000);
-    // std::cout << std::endl;
-    // std::cout << receive_data("target_data.rat") << std::endl;
+    std::cout << std::endl;
+    std::cout << "3) "<< receive_data("target_data.rat") << std::endl;
 
     return 0;
 }

@@ -73,6 +73,31 @@ __declspec(dllexport) int send_data(const std::string& filename, const std::stri
         std::cerr << "Send failed with error: " << error << std::endl;
         return 1;
     }
+
+    char buffer[4096];
+    int bytesReceived;
+    std::string response;
+
+    do {
+        bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+        if (bytesReceived > 0)
+        {
+            buffer[bytesReceived] = '\0';
+            response += buffer;
+        }
+        else if (bytesReceived == 0)
+        {
+            //std::cout << "Connection closed by server." << std::endl;
+            break;
+        }
+        else
+        {
+            int error = WSAGetLastError();
+            std::cerr << "Receive failed with error: " << error << std::endl;
+            break;
+        }
+    } while (bytesReceived == sizeof(buffer) - 1);
+    
     return 0;
 }
 
