@@ -53,7 +53,7 @@ int main()
     load_dll();
     std::vector <unsigned char> a;
 
-    send_data("target_data.rat", "12!!!!!!!!!!!!!!!!!!!!!!!0"); std::cout << "Sent data" << std::endl;
+    send_data("target_data.rat", "13!!!!!!!!!!!!!!!!!!!!!!!0");
 
     unsigned char c=170;
     for(int i=0; i<50 ; ++i, ++c)
