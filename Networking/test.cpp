@@ -55,14 +55,14 @@ int main()
 
     send_data("target_data.rat", "12!!!!!!!!!!!!!!!!!!!!!!!0"); std::cout << "Sent data" << std::endl;
 
-
-    // for(int i=0; i<20 ; ++i)
-    // {
-        std::cout << "1) "<< receive_data("target_data.rat") << std::endl;
-    //     Sleep(1000);
-    // }
-    a = receive_data_raw("target_data.rat");
-    std::cout << "2) "; for(unsigned char c : a) std::cout << c;\
+    unsigned char c=170;
+    for(int i=0; i<50 ; ++i, ++c)
+    {
+        std::cout << "( " << c << " ) " << receive_data("target_data.rat") << std::endl;
+        Sleep(500);
+    }
+    // a = receive_data_raw("target_data.rat");
+    // std::cout << "2) "; for(unsigned char c : a) std::cout << c;
 
     std::cout << std::endl;
     std::cout << "3) "<< receive_data("target_data.rat") << std::endl;
