@@ -59,10 +59,10 @@ int main()
     for(int i=0; i<50 ; ++i, ++c)
     {
         std::cout << "( " << c << " ) " << receive_data("target_data.rat") << std::endl;
-        Sleep(500);
+        Sleep(100);
     }
-    // a = receive_data_raw("target_data.rat");
-    // std::cout << "2) "; for(unsigned char c : a) std::cout << c;
+    a = receive_data_raw("target_data.rat");
+    std::cout << "2) "; for(unsigned char c : a) std::cout << c;
 
     std::cout << std::endl;
     std::cout << "3) "<< receive_data("target_data.rat") << std::endl;
