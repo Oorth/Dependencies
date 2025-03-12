@@ -71,18 +71,6 @@ bool reconnect()
 
 __declspec(dllexport) int send_data(const std::string& filename, const std::string& data)
 {
-
-    if (clientSocket == INVALID_SOCKET)
-    {
-        std::cerr << "Socket is invalid. Reconnecting..." << std::endl;
-        if (!reconnect())
-        {
-            std::cerr << "Reconnection failed." << std::endl;
-            return 1;
-        }
-        std::cout << "Reconnection successful." << std::endl;
-    }
-
     bool connected = TRUE;
     std::unique_lock<std::mutex> lock(socketMutex);
 
@@ -101,7 +89,7 @@ __declspec(dllexport) int send_data(const std::string& filename, const std::stri
                 int error = WSAGetLastError();
                 std::cerr << "Send failed with error: " << error << std::endl;
                 connected = false;
-                throw std::runtime_error("Send failed with error: " + std::to_string(error));
+                throw std::runtime_error("Send failed");
             }
 
             char buffer[4096];
@@ -117,7 +105,7 @@ __declspec(dllexport) int send_data(const std::string& filename, const std::stri
                 }
                 else if (bytesReceived == 0)
                 {
-                    std::cout << "[send data]Connection closed by server." << std::endl; connected = FALSE;
+                    std::cout << "Connection closed by server." << std::endl; connected = FALSE;
 
                     lock.unlock();
                     while (!reconnect())

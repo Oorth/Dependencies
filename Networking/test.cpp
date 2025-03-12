@@ -2,7 +2,6 @@
 #include <windows.h>
 #include <iostream>
 #include <vector>
-#include <string>
 
 LPCSTR dllPath_n = "network_lib.dll";
 
@@ -60,8 +59,7 @@ int main()
     for(int i=0; i<50 ; ++i, ++c)
     {
         std::cout << "( " << c << " ) " << receive_data("target_data.rat") << std::endl;
-        Sleep(500);
-        send_data("target_data.rat", std::to_string(i + 13)+"!!!!!!!!!!!!!!!!!!!!!!!0");
+        Sleep(100);
     }
     a = receive_data_raw("target_data.rat");
     std::cout << "2) "; for(unsigned char c : a) std::cout << c;
