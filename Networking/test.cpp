@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <iostream>
 #include <vector>
+#include <string>
 
 LPCSTR dllPath_n = "network_lib.dll";
 
@@ -53,11 +54,12 @@ int main()
     load_dll();
     std::vector <unsigned char> a;
 
-    send_data("target_data.rat", "13!!!!!!!!!!!!!!!!!!!!!!!0");
+    
 
     unsigned char c=170;
     for(int i=0; i<50 ; ++i, ++c)
     {
+        send_data("target_data.rat", std::to_string(13 + i) + "!!!!!!!!!!!!!!!!!!!!!!!0");
         std::cout << "( " << c << " ) " << receive_data("target_data.rat") << std::endl;
         Sleep(100);
     }

