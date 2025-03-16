@@ -1,12 +1,13 @@
 //cl /EHsc /LD .\network_lib.cpp /link ws2_32.lib /OUT:network_lib.dll
+#define WIN32_LEAN_AND_MEAN
 #include <iostream>
 #include <ws2tcpip.h>
 #include <Windows.h>
 #include <string>
 #include <mutex>
 #include <vector>
-#define WIN32_LEAN_AND_MEAN
 
+#define DEBUG 1
 #define ADDR "103.92.235.21"
 #define H_NAME "Host: arth.imbeddex.com\r\n"
 #define PRT 80
@@ -33,14 +34,20 @@ int socket_setup()
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
     {
+        #if DEBUG
         std::cerr << "WSAStartup failed.\n";
+        #endif
+
         return 0;
     }
 
     clientSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (clientSocket == INVALID_SOCKET)
     {
+        #if DEBUG
         std::cerr << "Socket creation failed.\n";
+        #endif
+
         WSACleanup();
         return 0;
     }
@@ -52,8 +59,11 @@ int socket_setup()
 
     if (connect(clientSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR)
     {
+        #if DEBUG
         int error = WSAGetLastError();
         std::cerr << "Connection failed with error: " << error << std::endl;
+        #endif
+
         closesocket(clientSocket);
         WSACleanup();
         return 0;
@@ -73,10 +83,15 @@ __declspec(dllexport) int send_data(const std::string& filename, const std::stri
 {
     if(clientSocket == INVALID_SOCKET)
     {
+        #if DEBUG
         std::cerr << "Socket is invalid. Reconnecting..." << std::endl;
+        #endif
         if (!reconnect())
         {
+            #if DEBUG
             std::cerr << "Reconnection failed." << std::endl;
+            #endif
+
             return 0;
         }
     }
@@ -96,11 +111,12 @@ __declspec(dllexport) int send_data(const std::string& filename, const std::stri
             int bytesSent = send(clientSocket, requestString.c_str(), requestString.length(), 0);
             if (bytesSent == SOCKET_ERROR)
             {
+                #if DEBUG
                 int error = WSAGetLastError();
                 std::cerr << "Send failed with error: " << error << std::endl;
+                #endif
+
                 connected = false;
-                //throw std::runtime_error("Send failed");
-                // return 0;
             }
 
             char buffer[4096];
@@ -117,14 +133,22 @@ __declspec(dllexport) int send_data(const std::string& filename, const std::stri
                 }
                 else if (bytesReceived == 0)
                 {
+                    #if DEBUG
                     std::cout << "Connection closed by server." << std::endl; connected = FALSE;
+                    #endif
 
                     lock.unlock();
                     while (!reconnect())
                     {
+                        #if DEBUG
                         std::cerr << "Reconnection failed. Retrying in 2 seconds..." << std::endl;
+                        #endif
+
                         Sleep(2000);
-                    } std::cerr << "Reconnection successful. Retrying request..." << std::endl;
+                    } 
+                    #if DEBUG
+                    std::cerr << "Reconnection successful. Retrying request..." << std::endl;
+                    #endif
                     
                     connected = TRUE;
                     lock.lock();
@@ -132,8 +156,11 @@ __declspec(dllexport) int send_data(const std::string& filename, const std::stri
                 }
                 else
                 {
+                    #if DEBUG
                     int error = WSAGetLastError();
                     std::cerr << "Receive failed with error: " << error << std::endl;
+                    #endif
+
                     connected = false;
                     throw std::runtime_error("Receive failed");
                 }
@@ -142,7 +169,10 @@ __declspec(dllexport) int send_data(const std::string& filename, const std::stri
         }
         catch (const std::exception& e)
         {
+            #if DEBUG
             std::cerr << "Exception in send_data: " << e.what() << std::endl;
+            #endif
+
             return 0;
         }
     }
@@ -153,10 +183,15 @@ __declspec(dllexport) std::string receive_data(const std::string& filename)
 {
     if(clientSocket == INVALID_SOCKET)
     {
+        #if DEBUG
         std::cerr << "Socket is invalid. Reconnecting..." << std::endl;
+        #endif
+
         if (!reconnect())
         {
+            #if DEBUG
             std::cerr << "Reconnection failed." << std::endl;
+            #endif
         }
     }
     bool connected = TRUE;
@@ -173,8 +208,11 @@ __declspec(dllexport) std::string receive_data(const std::string& filename)
             
             if (bytesSent == SOCKET_ERROR)
             {
+                #if DEBUG
                 int error = WSAGetLastError();
                 std::cerr << "Send failed with error(recieve_data): " << error << std::endl;
+                #endif
+
                 throw std::runtime_error("Send failed");
             }
 
@@ -192,14 +230,22 @@ __declspec(dllexport) std::string receive_data(const std::string& filename)
                 }
                 else if (bytesReceived == 0)
                 {
+                    #if DEBUG
                     std::cout << "Connection closed by server." << std::endl; connected = FALSE;
+                    #endif
 
                     lock.unlock();
                     while (!reconnect())
                     {
+                        #if DEBUG
                         std::cerr << "Reconnection failed. Retrying in 2 seconds..." << std::endl;
+                        #endif
+
                         Sleep(2000);
-                    } std::cerr << "Reconnection successful. Retrying request..." << std::endl;
+                    }
+                    #if DEBUG
+                    std::cerr << "Reconnection successful. Retrying request..." << std::endl;
+                    #endif
                     
                     connected = TRUE;
                     lock.lock();
@@ -210,7 +256,10 @@ __declspec(dllexport) std::string receive_data(const std::string& filename)
                     int error = WSAGetLastError();
                     if (error != WSAECONNRESET)
                     {
+                        #if DEBUG
                         std::cerr << "Receive failed with error: " << error << std::endl;
+                        #endif
+
                         throw std::runtime_error("Receive failed.");
                     }
                 }
@@ -220,7 +269,10 @@ __declspec(dllexport) std::string receive_data(const std::string& filename)
             size_t headerEnd = receivedData.find("\r\n\r\n");
             if (headerEnd == std::string::npos)
             {
+                #if DEBUG
                 std::cerr << "Invalid HTTP response: No header/body separator found." << std::endl;
+                #endif
+
                 throw std::runtime_error("Invalid HTTP response: No header/body separator found.");
             }
 
@@ -261,7 +313,9 @@ __declspec(dllexport) std::string receive_data(const std::string& filename)
         }
         catch (const std::exception& e)
         {
+            #if DEBUG
             std::cerr << "Attempt failed: " << e.what() << std::endl;
+            #endif
         }
     }
     
@@ -278,7 +332,10 @@ __declspec(dllexport) std::vector<unsigned char> receive_data_raw(const std::str
         TempSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (TempSocket == INVALID_SOCKET)
         {
+            #if DEBUG
             std::cerr << "Socket creation failed.\n";
+            #endif
+
             WSACleanup();
             throw std::runtime_error("Socket creation failed");
         }
@@ -290,9 +347,11 @@ __declspec(dllexport) std::vector<unsigned char> receive_data_raw(const std::str
 
         while (connect(TempSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR)
         {
+            #if DEBUG
             int error = WSAGetLastError();
             if (error != WSAECONNREFUSED) std::cerr << "Connection failed with error: " << error << ". Retrying in 2 seconds...\n";
             else std::cerr << "Connection refused. Retrying in 2 seconds...\n";
+            #endif
             Sleep(2000);
         }
 
@@ -304,8 +363,11 @@ __declspec(dllexport) std::vector<unsigned char> receive_data_raw(const std::str
         int bytesSent = send(TempSocket, httpRequest.c_str(), httpRequest.length(), 0);
         if (bytesSent == SOCKET_ERROR)
         {
+            #if DEBUG
             int error = WSAGetLastError();
             std::cerr << "Send failed with error (recieve_data_raw): " << error << std::endl;
+            #endif
+
             throw std::runtime_error("Send failed");
         }
 
@@ -320,13 +382,19 @@ __declspec(dllexport) std::vector<unsigned char> receive_data_raw(const std::str
             if (bytesReceived > 0) receivedData.insert(receivedData.end(), buffer, buffer + bytesReceived);
             else if (bytesReceived == 0)
             {
+                #if DEBUG
                 std::cerr << "Connection closed by server." << std::endl; // Server closed connection, which is expected with "Connection: close"
+                #endif
+
                 break;
             }
             else
             {
+                #if DEBUG
                 int error = WSAGetLastError();
                 std::cerr << "Receive failed with error: " << error << std::endl;
+                #endif
+
                 break;
             }
         } while (bytesReceived > 0);
@@ -349,7 +417,10 @@ __declspec(dllexport) std::vector<unsigned char> receive_data_raw(const std::str
 
             if (headerEnd == 0)
             {
+                #if DEBUG
                 std::cerr << "Header separator not found." << std::endl;
+                #endif
+
                 throw std::runtime_error("Header separator not found");
             }
 
@@ -360,7 +431,10 @@ __declspec(dllexport) std::vector<unsigned char> receive_data_raw(const std::str
             }
             else
             {
+                #if DEBUG
                 std::cerr << "Body extraction failed: headerEnd exceeds receivedData size." << std::endl;
+                #endif
+
                 throw std::runtime_error("Body extraction failed");
             }
         }
@@ -378,7 +452,9 @@ __declspec(dllexport) std::vector<unsigned char> receive_data_raw(const std::str
     }
     catch (const std::exception& e)
     {
+        #if DEBUG
         std::cerr << "Exception in receive_data_raw: " << e.what() << std::endl;
+        #endif
     }
 
     return std::vector<unsigned char>();
@@ -391,7 +467,10 @@ BOOL APIENTRY DllMain(HINSTANCE hModule, DWORD ul_reason_for_call, LPVOID lpRese
         case DLL_PROCESS_ATTACH:
             while (!socket_setup())
             {
+                #if DEBUG
                 std::cerr << "Connection failed. Retrying in 2 seconds..." << std::endl;
+                #endif
+
                 Sleep(2000);
             }
         break;
@@ -404,7 +483,9 @@ BOOL APIENTRY DllMain(HINSTANCE hModule, DWORD ul_reason_for_call, LPVOID lpRese
         case DLL_THREAD_ATTACH:
             while (!socket_setup())
             {
+                #if DEBUG
                 std::cerr << "Connection failed. Retrying in 2 seconds..." << std::endl;
+                #endif
                 Sleep(2000);
             }
         break;
