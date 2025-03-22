@@ -19,6 +19,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 HMODULE hNtdll = nullptr;
+typedef void* (__stdcall *GenericSyscallType)(...);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -42,7 +43,9 @@ void* FindExportAddress(HMODULE hModule, const char* funcName)
         }
     }
     
-    std::cout << "Failed to find export address of: " << funcName << "\tGetlastError message -> " << GetLastError() << std::endl;
+    #if DEBUG
+        std::cout << "Failed to find export address of: " << funcName << "\tGetlastError message -> " << GetLastError() << std::endl;
+    #endif
     return nullptr;
 }
 
@@ -71,9 +74,8 @@ DWORD FindSyscallSSN(const char* function_name)
     return 0;
 }
 
-NTSTATUS SYS_CallNtWriteFile(DWORD dSSN, HANDLE fileHandle, PIO_STATUS_BLOCK ioStatusBlock, PVOID buffer, ULONG length)
+void* SysFunction(DWORD dSSN, ...)
 {
-
     BYTE syscall_code[] =
     {
         0xB8, 0x00, 0x00, 0x00, 0x00,   // mov eax, SSN
@@ -81,27 +83,38 @@ NTSTATUS SYS_CallNtWriteFile(DWORD dSSN, HANDLE fileHandle, PIO_STATUS_BLOCK ioS
         0x0F, 0x05,                     // syscall
         0xC3                            // ret
     };
+    *(DWORD*)(syscall_code + 1) = dSSN;
 
-    *(DWORD*)(syscall_code + 1) = dSSN; // Inject the SSN
-
-    // Allocate executable memory
     void* exec_mem = VirtualAlloc(nullptr, sizeof(syscall_code), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     if (!exec_mem)
     {
         fuk("Failed to allocate executable memory");
-        return -1;
+        return nullptr;
     }
 
     memcpy(exec_mem, syscall_code, sizeof(syscall_code));
-    using SyscallType = NTSTATUS(NTAPI*)(HANDLE, HANDLE, PIO_APC_ROUTINE, PVOID, PIO_STATUS_BLOCK, PVOID, ULONG, PLARGE_INTEGER, PULONG);
-    SyscallType syscall_func = reinterpret_cast<SyscallType>(exec_mem);
 
-    // Execute syscall
-    NTSTATUS status = syscall_func(fileHandle, nullptr, nullptr, nullptr, ioStatusBlock, buffer, length, nullptr, nullptr);
+    GenericSyscallType syscallFunc = reinterpret_cast<GenericSyscallType>(exec_mem);
 
-    // Free allocated memory
+    // Process the variadic arguments.
+    va_list args;
+    va_start(args, dSSN);
+    void* arg1 = va_arg(args, void*);
+    void* arg2 = va_arg(args, void*);
+    void* arg3 = va_arg(args, void*);
+    void* arg4 = va_arg(args, void*);
+    void* arg5 = va_arg(args, void*);
+    void* arg6 = va_arg(args, void*);
+    void* arg7 = va_arg(args, void*);
+    void* arg8 = va_arg(args, void*);
+    void* arg9 = va_arg(args, void*);
+    va_end(args);
+
+
+    void* retValue = syscallFunc(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
+
     VirtualFree(exec_mem, 0, MEM_RELEASE);
-    return status;
+    return retValue;
 }
 
 int main()
@@ -122,18 +135,19 @@ int main()
         fuk("Coudnt find the ssn");
         return 1;
     }
-    std::cout << "SSN : " << dSSN << std::endl;
-
+    #if DEBUG
+        std::cout << "SSN : " << dSSN << std::endl;
+    #endif
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-    HANDLE fileHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+
     IO_STATUS_BLOCK ioStatusBlock = {};
 
     char buffer[] = "!!!!Hello from NtWriteFile syscall!!!\n\n";
     ULONG length = sizeof(buffer) - 1;
 
-    NTSTATUS status = SYS_CallNtWriteFile(dSSN, fileHandle, &ioStatusBlock, buffer, length);
+    void* status = SysFunction(dSSN, GetStdHandle(STD_OUTPUT_HANDLE), nullptr, nullptr, nullptr, &ioStatusBlock, buffer, length, nullptr, nullptr);
 
-    if (status == 0)
+    if((NTSTATUS)(uintptr_t(status) == 0))
     {
         ok("NtWriteFile call successful!");
     }
@@ -143,6 +157,37 @@ int main()
         //std::cout << "Status: 0x" << std::hex << status << std::endl;
     }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+   // Open a dummy handle (using CreateFile) to test NtClose
+   HANDLE hFile = CreateFileW(L"testfile.txt", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+   if (hFile == INVALID_HANDLE_VALUE)
+   {
+        fuk("Failed to create test file");
+        return 1;
+   }
+   ok("File created successfully");
+
+   dSSN = FindSyscallSSN("NtClose");
+   if(!dSSN)
+   {
+       fuk("Coudnt find the ssn");
+       return 1;
+   }
+   #if DEBUG
+       std::cout << "SSN : " << dSSN << std::endl;
+   #endif
+   // Call NtClose using our syscall function
+   status = SysFunction(dSSN, hFile);
+
+   if((NTSTATUS)(uintptr_t(status) == 0))
+   {
+       ok("NtClose call successful!");
+   }
+   else
+   {
+       fuk("NtClose call failed!");
+       std::cout << "Status: 0x" << std::hex << (NTSTATUS)(uintptr_t(status)) << std::endl;
+   }
 
     return 0;
 }
