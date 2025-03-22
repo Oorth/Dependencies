@@ -1,7 +1,8 @@
-//cl.exe /EHsc .\test.cpp /link /OUT:test.exe
+//cl.exe /EHsc .\test.cpp /link stub.obj /OUT:test.exe
 #define DEBUG 1
 
 #include <Windows.h>
+#include <winternl.h>
 #if DEBUG
     #include <iostream>
 #endif
@@ -82,12 +83,74 @@ int main()
         return 1;
     } ok("loaded ntdll");
 
-    dSSN = FindSyscallSSN("NtProtectVirtualMemory");
+    dSSN = FindSyscallSSN("NtWriteFile");
     if(!dSSN)
     {
         fuk("Coudnt find the ssn");
         return 1;
     }
     std::cout << "SSN : " << dSSN << std::endl;
+
+    using NtWriteFile_t = NTSTATUS(NTAPI*)(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock, PVOID Buffer,ULONG Length,PLARGE_INTEGER ByteOffset,PULONG Key);
+
+    // Prepare arguments for NtWriteFile
+    HANDLE fileHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+    HANDLE event = nullptr;
+    PIO_APC_ROUTINE apcRoutine = nullptr;
+    PVOID apcContext = nullptr;
+
+    IO_STATUS_BLOCK ioStatusBlock;
+    ioStatusBlock.Information = 0;
+    ioStatusBlock.Status = 0;
+
+    char buffer[] = "!!!!Hello from NtWriteFile syscall!!!\n\n";
+    ULONG length = sizeof(buffer) - 1;
+    LARGE_INTEGER byteOffset;
+    byteOffset.QuadPart = 0;
+    PULONG key = nullptr;
+
+    // Prepare syscall
+    BYTE syscall_code[] =
+    {
+        0xB8, 0x00, 0x00, 0x00, 0x00,       // mov eax, SSN
+        0x4C, 0x8B, 0xD1,                   // mov r10, rcx
+        0x0F, 0x05,                         // syscall
+        0xC3                                // ret
+    };
+
+    // Fill SSN
+    *(DWORD*)(syscall_code + 1) = dSSN;
+
+
+    // Execute syscall
+    using SyscallType = NTSTATUS(NTAPI*)(HANDLE, HANDLE, PIO_APC_ROUTINE, PVOID, PIO_STATUS_BLOCK, PVOID, ULONG, PLARGE_INTEGER, PULONG);
+    
+    // Allocate executable memory
+    void* exec_mem = VirtualAlloc(nullptr, sizeof(syscall_code), MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+    if (!exec_mem)
+    {
+        fuk("Failed to allocate executable memory");
+        return 1;
+    }
+
+    // Copy syscall code to executable memory
+    memcpy(exec_mem, syscall_code, sizeof(syscall_code));
+
+    SyscallType syscall_func = reinterpret_cast<SyscallType>(exec_mem);
+    NTSTATUS status = syscall_func(fileHandle, event, apcRoutine, apcContext, &ioStatusBlock, buffer, length, &byteOffset, key);
+
+    // Free the allocated memory
+    VirtualFree(exec_mem, 0, MEM_RELEASE);
+
+    if (status == 0)
+    {
+        ok("NtWriteFile call successful!");
+    } 
+    else
+    {
+        fuk("NtWriteFile call failed!");
+        std::cout << "Status: 0x" << std::hex << status << std::endl;
+    }
+
     return 0;
 }
