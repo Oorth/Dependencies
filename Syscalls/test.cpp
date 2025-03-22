@@ -1,5 +1,5 @@
 //cl.exe /EHsc .\test.cpp /link stub.obj /OUT:test.exe
-#define DEBUG 1
+#define DEBUG 0
 
 #include <Windows.h>
 #include <winternl.h>
@@ -49,7 +49,7 @@ void* FindExportAddress(HMODULE hModule, const char* funcName)
     return nullptr;
 }
 
-DWORD FindSyscallSSN(const char* function_name)
+void* SysFunction(const char* function_name, ...)
 {
     void* vpfunction = nullptr;
     DWORD dSyscall_SSN = 0;
@@ -66,16 +66,13 @@ DWORD FindSyscallSSN(const char* function_name)
     {
         ok("Function is Unhooked");
         dSyscall_SSN = *(DWORD*)(pBytes + 4);
-
-        return dSyscall_SSN;
     }
-    warn("Function might be hooked");
+    else
+    {
+        fuk("Function might be hooked");
+        return 0;
+    }   
 
-    return 0;
-}
-
-void* SysFunction(DWORD dSSN, ...)
-{
     BYTE syscall_code[] =
     {
         0xB8, 0x00, 0x00, 0x00, 0x00,   // mov eax, SSN
@@ -83,7 +80,7 @@ void* SysFunction(DWORD dSSN, ...)
         0x0F, 0x05,                     // syscall
         0xC3                            // ret
     };
-    *(DWORD*)(syscall_code + 1) = dSSN;
+    *(DWORD*)(syscall_code + 1) = dSyscall_SSN;
 
     void* exec_mem = VirtualAlloc(nullptr, sizeof(syscall_code), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     if (!exec_mem)
@@ -98,7 +95,7 @@ void* SysFunction(DWORD dSSN, ...)
 
     // Process the variadic arguments.
     va_list args;
-    va_start(args, dSSN);
+    va_start(args, function_name);
     void* arg1 = va_arg(args, void*);
     void* arg2 = va_arg(args, void*);
     void* arg3 = va_arg(args, void*);
@@ -129,23 +126,13 @@ int main()
         return 1;
     } ok("loaded ntdll");
 
-    dSSN = FindSyscallSSN("NtWriteFile");
-    if(!dSSN)
-    {
-        fuk("Coudnt find the ssn");
-        return 1;
-    }
-    #if DEBUG
-        std::cout << "SSN : " << dSSN << std::endl;
-    #endif
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     IO_STATUS_BLOCK ioStatusBlock = {};
-
     char buffer[] = "!!!!Hello from NtWriteFile syscall!!!\n\n";
     ULONG length = sizeof(buffer) - 1;
 
-    void* status = SysFunction(dSSN, GetStdHandle(STD_OUTPUT_HANDLE), nullptr, nullptr, nullptr, &ioStatusBlock, buffer, length, nullptr, nullptr);
+    void* status = SysFunction("NtWriteFile", GetStdHandle(STD_OUTPUT_HANDLE), nullptr, nullptr, nullptr, &ioStatusBlock, buffer, length, nullptr, nullptr);
 
     if((NTSTATUS)(uintptr_t(status) == 0))
     {
@@ -158,36 +145,28 @@ int main()
     }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-   // Open a dummy handle (using CreateFile) to test NtClose
-   HANDLE hFile = CreateFileW(L"testfile.txt", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-   if (hFile == INVALID_HANDLE_VALUE)
-   {
+    // Open a dummy handle (using CreateFile) to test NtClose
+    HANDLE hFile = CreateFileW(L"testfile.txt", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE)
+    {
         fuk("Failed to create test file");
         return 1;
-   }
-   ok("File created successfully");
+    }
+    ok("File created successfully");
 
-   dSSN = FindSyscallSSN("NtClose");
-   if(!dSSN)
-   {
-       fuk("Coudnt find the ssn");
-       return 1;
-   }
-   #if DEBUG
-       std::cout << "SSN : " << dSSN << std::endl;
-   #endif
-   // Call NtClose using our syscall function
-   status = SysFunction(dSSN, hFile);
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-   if((NTSTATUS)(uintptr_t(status) == 0))
-   {
-       ok("NtClose call successful!");
-   }
-   else
-   {
-       fuk("NtClose call failed!");
-       std::cout << "Status: 0x" << std::hex << (NTSTATUS)(uintptr_t(status)) << std::endl;
-   }
+    // Call NtClose using our syscall function
+    status = SysFunction("NtClose", hFile); 
+    if((NTSTATUS)(uintptr_t(status) == 0)){ok("NtClose call successful!");}
+    else
+    {
+        fuk("NtClose call failed!");
+        
+        #if DEBUG
+        std::cout << "Status: 0x" << std::hex << (NTSTATUS)(uintptr_t(status)) << std::endl;
+        #endif
+    }
 
     return 0;
 }
