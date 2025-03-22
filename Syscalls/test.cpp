@@ -2,15 +2,18 @@
 #define DEBUG 1
 
 #include <Windows.h>
-#include <iostream>
-
+#if DEBUG
+    #include <iostream>
+#endif
 ////////////////////////////////////////////////////////////////////////////////
 #if DEBUG
     #define ok(something) std::cout << " [+] " << something << std::endl;
     #define fuk(something) std::cout << " [-] " << something << std::endl;
+    #define warn(something) std::cout << " [!] " << something << std::endl;
 #else
     #define ok(something)
     #define fuk(something)
+    #define warn(something)
 #endif
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -37,6 +40,7 @@ void* FindExportAddress(HMODULE hModule, const char* funcName)
             return (void*)((BYTE*)hModule + funcRVA);
         }
     }
+    
     std::cout << "Failed to find export address of: " << funcName << "\tGetlastError message -> " << GetLastError() << std::endl;
     return nullptr;
 }
@@ -61,6 +65,7 @@ DWORD FindSyscallSSN(const char* function_name)
 
         return dSyscall_SSN;
     }
+    warn("Function might be hooked");
 
     return 0;
 }
@@ -70,7 +75,7 @@ int main()
     const char* function_name;
     DWORD dSSN = 0;
 
-    hNtdll = LoadLibraryW(L"ntdll.dll");    
+    hNtdll = LoadLibraryW(L"ntdll.dll");
     if(!hNtdll)
     {
         fuk("cant load ntdll");
