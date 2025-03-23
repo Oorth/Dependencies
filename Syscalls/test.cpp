@@ -1,5 +1,5 @@
 //cl.exe /EHsc .\test.cpp /link stub.obj /OUT:test.exe
-#define DEBUG 0
+#define DEBUG 1
 
 #include <Windows.h>
 #include <winternl.h>
@@ -93,22 +93,22 @@ void* SysFunction(const char* function_name, ...)
 
     GenericSyscallType syscallFunc = reinterpret_cast<GenericSyscallType>(exec_mem);
 
-    // Process the variadic arguments.
+
     va_list args;
     va_start(args, function_name);
-    void* arg1 = va_arg(args, void*);
-    void* arg2 = va_arg(args, void*);
-    void* arg3 = va_arg(args, void*);
-    void* arg4 = va_arg(args, void*);
-    void* arg5 = va_arg(args, void*);
-    void* arg6 = va_arg(args, void*);
-    void* arg7 = va_arg(args, void*);
-    void* arg8 = va_arg(args, void*);
-    void* arg9 = va_arg(args, void*);
+
+    void* argList[16] = {};
+    for(volatile int i = 1; i < 16 ; ++i)
+    {
+        void* arg = va_arg(args,void*);
+        if(arg) argList[i] = arg;
+    }
+
     va_end(args);
 
-
-    void* retValue = syscallFunc(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
+    void* retValue = syscallFunc(argList[1], argList[2], argList[3], argList[4], argList[5],
+                                argList[6], argList[7], argList[8], argList[9], argList[10],
+                                argList[11], argList[12], argList[13], argList[14], argList[15]);
 
     VirtualFree(exec_mem, 0, MEM_RELEASE);
     return retValue;
@@ -118,6 +118,7 @@ int main()
 {
     const char* function_name;
     DWORD dSSN = 0;
+    IO_STATUS_BLOCK ioStatusBlock = {};
 
     hNtdll = LoadLibraryW(L"ntdll.dll");
     if(!hNtdll)
@@ -128,7 +129,6 @@ int main()
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    IO_STATUS_BLOCK ioStatusBlock = {};
     char buffer[] = "!!!!Hello from NtWriteFile syscall!!!\n\n";
     ULONG length = sizeof(buffer) - 1;
 
@@ -145,19 +145,45 @@ int main()
     }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // Open a dummy handle (using CreateFile) to test NtClose
-    HANDLE hFile = CreateFileW(L"testfile.txt", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile == INVALID_HANDLE_VALUE)
+    HANDLE fileHandle = nullptr;
+    UNICODE_STRING fileName;
+    OBJECT_ATTRIBUTES objAttr;
+
+    // Create full path with windows prefix
+    WCHAR filePath[] = L"\\??\\C:\\MALWARE\\Dependencies\\Syscalls\\testfile.txt";
+    fileName.Buffer = filePath;
+    fileName.Length = wcslen(filePath) * sizeof(WCHAR);
+    fileName.MaximumLength = fileName.Length + sizeof(WCHAR);
+
+    InitializeObjectAttributes(&objAttr, &fileName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+
+
+    void* status1 = SysFunction("NtCreateFile",
+        &fileHandle, 
+        FILE_GENERIC_WRITE,
+        &objAttr,
+        &ioStatusBlock,
+        NULL,
+        FILE_ATTRIBUTE_NORMAL,
+        FILE_SHARE_READ,
+        FILE_OVERWRITE_IF,
+        FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
+        NULL,
+        0
+    );
+
+    if((NTSTATUS)(uintptr_t(status1)) != 0)
     {
         fuk("Failed to create test file");
+        #if DEBUG
+        std::cout << "Status: 0x" << std::hex << (NTSTATUS)(uintptr_t(status1)) << std::endl;
+        #endif
         return 1;
     }
     ok("File created successfully");
-
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // Call NtClose using our syscall function
-    status = SysFunction("NtClose", hFile); 
+    status = SysFunction("NtClose", fileHandle); 
     if((NTSTATUS)(uintptr_t(status) == 0)){ok("NtClose call successful!");}
     else
     {
