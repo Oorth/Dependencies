@@ -1,5 +1,5 @@
 //cl.exe /EHsc .\test.cpp /link stub.obj /OUT:test.exe
-#define DEBUG 1
+#define DEBUG 0
 
 #include <Windows.h>
 #include <winternl.h>
@@ -10,7 +10,7 @@
 #if DEBUG
     #define ok(something) std::cout << " [+] " << something << std::endl;
     #define fuk(something) std::cout << " [-] " << something << std::endl;
-    #define warn(something) std::cout << " [!] " << something << std::endl;
+    #define warn(something) std::cout << " [!] " << something << " [!] "<< std::endl;
 #else
     #define ok(something)
     #define fuk(something)
@@ -52,6 +52,7 @@ void* FindExportAddress(HMODULE hModule, const char* funcName)
 void* SysFunction(const char* function_name, ...)
 {
     void* vpfunction = nullptr;
+    BYTE* pCleanSyscall = nullptr;
     DWORD dSyscall_SSN = 0;
 
     vpfunction = FindExportAddress(hNtdll, function_name);
@@ -65,7 +66,44 @@ void* SysFunction(const char* function_name, ...)
     if(pBytes[0] == 0x4C && pBytes[1] == 0x8B && pBytes[2] == 0xD1)
     {
         ok("Function is Unhooked");
-        dSyscall_SSN = *(DWORD*)(pBytes + 4);
+        //dSyscall_SSN = *(DWORD*)(pBytes + 4);
+        for(int i = 0; i < 32 ; ++i)
+        {
+            if(dSyscall_SSN != 0 && pCleanSyscall != nullptr) break;
+
+            if(!dSyscall_SSN)
+            {
+                //warn("dSyscall_SSN");
+                if(i + 4 < 32 && pBytes[i] == 0xB8)
+                {
+                    dSyscall_SSN = *(DWORD*)(pBytes + i + 1);
+
+                    #if DEBUG
+                    std::cout << "SSN: 0x" << std::hex << dSyscall_SSN << std::endl;
+                    #endif
+                }
+                //warn("OUT dSyscall_SSN");
+            }
+
+            if(!pCleanSyscall)
+            {
+                if(i + 1 < 32 && (pBytes[i] == 0x0F || pBytes[i+1] == 0x05))
+                {
+                    pCleanSyscall = pBytes + i;
+
+                    #if DEBUG
+                    std::cout << "Address of the syscall: 0x" << std::hex << reinterpret_cast<void*>(pCleanSyscall) << std::endl;
+                    #endif
+                }
+            }
+        }
+
+        if(dSyscall_SSN == 0 || pCleanSyscall == nullptr)
+        {
+            fuk("Coudnt find either the SSN or SYSCALL");
+            return nullptr;
+        }
+
     }
     else
     {
@@ -98,7 +136,7 @@ void* SysFunction(const char* function_name, ...)
     va_start(args, function_name);
 
     void* argList[16] = {};
-    for(volatile int i = 1; i < 16 ; ++i)
+    for(int i = 1; i < 16 ; ++i)
     {
         void* arg = va_arg(args,void*);
         if(arg) argList[i] = arg;
@@ -110,7 +148,7 @@ void* SysFunction(const char* function_name, ...)
                                 argList[6], argList[7], argList[8], argList[9], argList[10],
                                 argList[11], argList[12], argList[13], argList[14], argList[15]);
 
-    VirtualFree(exec_mem, 0, MEM_RELEASE);
+    VirtualFree(exec_mem, 0, MEM_RELEASE); // Correct usage: size is ignored with MEM_RELEASE
     return retValue;
 }
 
@@ -134,7 +172,7 @@ int main()
 
     void* status = SysFunction("NtWriteFile", GetStdHandle(STD_OUTPUT_HANDLE), nullptr, nullptr, nullptr, &ioStatusBlock, buffer, length, nullptr, nullptr);
 
-    if((NTSTATUS)(uintptr_t(status) == 0))
+    if((NTSTATUS)uintptr_t(status) == 0)
     {
         ok("NtWriteFile call successful!");
     }
