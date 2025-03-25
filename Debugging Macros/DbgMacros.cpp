@@ -6,13 +6,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #if DEBUG
-    #define ok(msg, ...) details::log(" [+] ", msg, __VA_ARGS__)
-    #define fuk(msg, ...) details::log(" [-] ", msg, __VA_ARGS__, " [!] ")
-    #define warn(msg, ...) details::log(" [!] ", msg, __VA_ARGS__)
+    #define ok(...) details::log(" [+] ", ##__VA_ARGS__)
+    #define fuk(...) details::log(" [-] ", ##__VA_ARGS__, " [!] ")
+    #define warn(...) details::log(" [!] ", ##__VA_ARGS__)
 #else
-    #define ok(msg, ...)
-    #define fuk(msg, ...)
-    #define warn(msg, ...)
+    #define ok(...)
+    #define fuk(...)
+    #define warn(...)
 #endif
 
 #if DEBUG
@@ -32,6 +32,14 @@ namespace details
         manip(os);
     }
 
+    template <typename T>
+    void log(const char* prefix, const T& single_arg)
+    {
+        std::cout << prefix;
+        log_arg(std::cout, single_arg);
+        std::cout << std::endl;
+    }
+
     template <typename... Args>
     void log(const char* prefix, const char* msg, Args... args)
     {
@@ -47,13 +55,14 @@ namespace details
         log_arg(std::cout, args...);
         std::cout << suffix << std::endl;
     }
-} // namespace details
+}
 #endif
 
 int main()
 {
     void* a = (void*)10;
-
+    int i = 1;
+    ok(i);
     ok("just text");
     ok("int -> ", std::dec, reinterpret_cast<intptr_t>(a), " and the Hex -> 0x", a );
     fuk("int -> ", std::dec, reinterpret_cast<intptr_t>(a), " and the Hex -> 0x", a );
