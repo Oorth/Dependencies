@@ -1,6 +1,7 @@
 //cl.exe /EHsc .\testmacros.cpp /link /OUT:testmacros.exe
-#define DEBUG 0
+#define DEBUG 1
 #define DEBUG_VECTOR 1
+#define DEBUG_FILE 1
 #include "DbgMacros.h"
 
 #if DEBUG_VECTOR
@@ -24,5 +25,8 @@ int main()
         for (const auto& msg : details::logged_messages) std::cout << msg << std::endl;
     #endif
 
+    #if DEBUG_FILE
+        details::close_log_file();              // Add this line at the end
+    #endif
     return 0;
 }
