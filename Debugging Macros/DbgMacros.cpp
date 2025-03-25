@@ -1,3 +1,29 @@
+//cl.exe /EHsc .\DbgMacros.cpp /link /OUT:DbgMacros.exe
+/*******************************************************************************
+ * Debugging Macros Usage:
+ * 
+ * This file provides color-coded debugging macros for console output.
+ * When DEBUG is set to 1, the following macros are available:
+ * 
+ * ok(...)   - Prints in green with [+] prefix
+ *             Example: ok("Success: ", value);
+ * 
+ * fuk(...)  - Prints in red with [!] prefix and suffix
+ *             Example: fuk("Error: ", error_code);
+ * 
+ * warn(...) - Prints in yellow with [o] prefix
+ *             Example: warn("Warning: ", warning_msg);
+ * 
+ * norm(...) - Prints without color or prefix
+ *             Example: norm("Regular message");
+ * 
+ * Features:
+ * - Supports multiple arguments
+ * - Handles stream manipulators (std::dec, std::hex, etc.)
+ * - Automatically resets color after each message
+ * - All macros become no-ops when DEBUG is set to 0
+ ******************************************************************************/
+
 #define DEBUG 1
 
 #if DEBUG
@@ -12,8 +38,8 @@
     #define RESET "\033[0m"
     
     #define ok(...) details::log(GREEN " [+] ", ##__VA_ARGS__)
-    #define fuk(...) details::log(RED " [-] ", ##__VA_ARGS__, " [!] ")
-    #define warn(...) details::log(YELLOW " [!] ", ##__VA_ARGS__)
+    #define fuk(...) details::log(RED " [!] ", ##__VA_ARGS__, " [!] ")
+    #define warn(...) details::log(YELLOW " [o] ", ##__VA_ARGS__)
     #define norm(...) details::log("", ##__VA_ARGS__)
 #else
     #define ok(...)
