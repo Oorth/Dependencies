@@ -1,8 +1,13 @@
 /*******************************************************************************
  * Debugging Macros Usage:
  * 
- * !!!!Include a #define DEBUG 0/1 in your code!!!!
+ * ==========================================================================
+ * !!!!Include a #define DEBUG 0/1 in your code to print to console!!!!
  * This header may include iostream depending on the DEBUG
+ * 
+ * !!!!Include a #define DEBUG_VECTOR 0/1 in your code to store to a vector!!!!
+ * can be accessed as -> for (const auto& msg : details::logged_messages) std::cout << msg << std::endl;  //example
+ * ==========================================================================
  * 
  * This file provides color-coded debugging macros for console output.
  * When DEBUG is set to 1, the following macros are available:
@@ -32,19 +37,19 @@
         #include <iostream>
     #endif
 
-    #if log_vector
+    #if DEBUG_VECTOR
         #include <vector>
         #include <sstream>
         #include <iomanip>
     #endif
     ////////////////////////////////////////////////////////////////////////////////
 
-    #if DEBUG
+    #if DEBUG || DEBUG_VECTOR
         #define GREEN "\033[32m"
         #define RED "\033[31m"
         #define YELLOW "\033[33m"
         #define RESET "\033[0m"
-        
+
         #define ok(...) details::log(GREEN " [+] ", ##__VA_ARGS__)
         #define fuk(...) details::log(RED " [!] ", ##__VA_ARGS__, " [!] ")
         #define warn(...) details::log(YELLOW " [o] ", ##__VA_ARGS__)
@@ -56,10 +61,10 @@
         #define norm(...)
     #endif
 
-    #if DEBUG
+    #if DEBUG || DEBUG_VECTOR // Include details namespace if either DEBUG or DEBUG_VECTOR is defined
         namespace details
         {
-            #if log_vector
+            #if DEBUG_VECTOR
                 std::vector<std::string> logged_messages;
             #endif
 
@@ -77,11 +82,13 @@
             template <typename... Args>
             void log(const char* prefix, Args... args)
             {
-                std::cout << prefix;
-                log_arg(std::cout, args...);
-                std::cout << RESET << std::endl;
-                
-                #if log_vector
+                #if DEBUG
+                    std::cout << prefix;
+                    log_arg(std::cout, args...);
+                    std::cout << RESET << std::endl;
+                #endif
+
+                #if DEBUG_VECTOR
                     std::stringstream ss;
                     ss << prefix;
                     log_arg(ss, args...);
@@ -92,11 +99,13 @@
             template <typename... Args>
             void log(const char* prefix, const char* msg, Args... args)
             {
-                std::cout << prefix << msg << " ";
-                log_arg(std::cout, args...);
-                std::cout << RESET << std::endl;
-                
-                #if log_vector
+                #if DEBUG
+                    std::cout << prefix << msg << " ";
+                    log_arg(std::cout, args...);
+                    std::cout << RESET << std::endl;
+                #endif
+
+                #if DEBUG_VECTOR
                     std::stringstream ss;
                     ss << prefix << msg << " ";
                     log_arg(ss, args...);
@@ -107,11 +116,13 @@
             template <typename... Args>
             void log(const char* prefix, const char* msg, Args... args, const char* suffix)
             {
-                std::cout << prefix << msg << " ";
-                log_arg(std::cout, args...);
-                std::cout << suffix << RESET << std::endl;
-            
-                #if log_vector
+                #if DEBUG
+                    std::cout << prefix << msg << " ";
+                    log_arg(std::cout, args...);
+                    std::cout << suffix << RESET << std::endl;
+                #endif
+
+                #if DEBUG_VECTOR
                     std::stringstream ss;
                     ss << prefix << msg << " ";
                     log_arg(ss, args...);

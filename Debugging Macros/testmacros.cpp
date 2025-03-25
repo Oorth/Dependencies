@@ -1,7 +1,11 @@
 //cl.exe /EHsc .\testmacros.cpp /link /OUT:testmacros.exe
-#define DEBUG 1
-#define log_vector 1
+#define DEBUG 0
+#define DEBUG_VECTOR 1
 #include "DbgMacros.h"
+
+#if DEBUG_VECTOR
+    #include <iostream>
+#endif
 
 int main()
 {    
@@ -15,7 +19,7 @@ int main()
     fuk("int -> ", std::dec, reinterpret_cast<intptr_t>(a), " and the Hex -> 0x", a );
     warn("int -> ", std::dec, reinterpret_cast<intptr_t>(a), " and the Hex -> 0x", a );
 
-    #if log_vector
+    #if DEBUG_VECTOR
         std::cout << "\nLogged messages in vector:\n";
         for (const auto& msg : details::logged_messages) std::cout << msg << std::endl;
     #endif
