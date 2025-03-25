@@ -15,6 +15,8 @@ int main()
 
     ok(i);
     ok("just text");
+    fuk("Error str");
+    warn("warning str");
     norm("normal");
     ok("int -> ", std::dec, reinterpret_cast<intptr_t>(a), " and the Hex -> 0x", a );
     fuk("int -> ", std::dec, reinterpret_cast<intptr_t>(a), " and the Hex -> 0x", a );

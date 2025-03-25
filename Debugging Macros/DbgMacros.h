@@ -119,13 +119,14 @@
 
             void log_arg(std::ostream& os, std::ostream& (*manip)(std::ostream&)) { manip(os); }
 
+            // Added this overload back
             template <typename... Args>
             void log(const char* prefix_with_color, Args... args)
             {
                 #if DEBUG
                     std::cout << prefix_with_color;
                     log_arg(std::cout, args...);
-                    std::cout << RESET << std::endl;
+                    std::cout << std::endl; // RESET is handled in log_arg
                 #endif
 
                 #if DEBUG_VECTOR
@@ -140,12 +141,10 @@
                     if (log_file_opened)
                     {
                         std::stringstream ss_file;
-
                         const char* prefix_no_color = "";
                         if (prefix_with_color == GREEN " [+] ") prefix_no_color = " [+] ";
                         else if (prefix_with_color == RED " [!] ") prefix_no_color = " [!] ";
                         else if (prefix_with_color == YELLOW " [o] ") prefix_no_color = " [o] ";
-
                         ss_file << prefix_no_color;
                         log_arg(ss_file, args...);
                         log_output_file << ss_file.str() << std::endl;
@@ -174,50 +173,12 @@
                     if (log_file_opened)
                     {
                         std::stringstream ss_file;
-
                         const char* prefix_no_color = "";
                         if (prefix_with_color == GREEN " [+] ") prefix_no_color = " [+] ";
                         else if (prefix_with_color == RED " [!] ") prefix_no_color = " [!] ";
                         else if (prefix_with_color == YELLOW " [o] ") prefix_no_color = " [o] ";
-
                         ss_file << prefix_no_color << msg << " ";
                         log_arg(ss_file, args...);
-                        log_output_file << ss_file.str() << std::endl;
-                    }
-                #endif
-            }
-
-            template <typename... Args>
-            void log(const char* prefix_with_color, const char* msg, Args... args, const char* suffix)
-            {
-                #if DEBUG
-                    std::cout << prefix_with_color << msg << " ";
-                    log_arg(std::cout, args...);
-                    std::cout << suffix << RESET << std::endl;
-                #endif
-
-                #if DEBUG_VECTOR
-                    std::stringstream ss;
-                    ss << prefix_with_color << msg << " ";
-                    log_arg(ss, args...);
-                    ss << suffix;
-                    logged_messages.push_back(ss.str());
-                #endif
-
-                #if DEBUG_FILE
-                    open_log_file();
-                    if (log_file_opened)
-                    {
-                        std::stringstream ss_file;
-
-                        const char* prefix_no_color = "";
-                        if (prefix_with_color == GREEN " [+] ") prefix_no_color = " [+] ";
-                        else if (prefix_with_color == RED " [!] ") prefix_no_color = " [!] ";
-                        else if (prefix_with_color == YELLOW " [o] ") prefix_no_color = " [o] ";
-
-                        ss_file << prefix_no_color << msg << " ";
-                        log_arg(ss_file, args...);
-                        ss_file << suffix;
                         log_output_file << ss_file.str() << std::endl;
                     }
                 #endif
