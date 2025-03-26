@@ -62,6 +62,7 @@
         #define GREEN "\033[32m"
         #define RED "\033[31m"
         #define YELLOW "\033[33m"
+        #define CYAN "\033[96m"
         #define RESET "\033[0m"
 
         #define ok(...) details::log(GREEN " [+] ", ##__VA_ARGS__)

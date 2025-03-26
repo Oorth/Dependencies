@@ -1,7 +1,7 @@
 //cl.exe /EHsc .\testmacros.cpp /link /OUT:testmacros.exe
 #define DEBUG 1
-#define DEBUG_VECTOR 1
-#define DEBUG_FILE 1
+#define DEBUG_VECTOR 0
+#define DEBUG_FILE 0
 #include "DbgMacros.h"
 
 #if DEBUG_VECTOR
