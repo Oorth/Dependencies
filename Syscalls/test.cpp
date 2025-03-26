@@ -1,21 +1,11 @@
-//cl.exe /EHsc .\test.cpp /link stub.obj /OUT:test.exe
+//cl.exe /EHsc .\test.cpp /link /OUT:test.exe
 #define DEBUG 1
+#define DEBUG_FILE 0
 
 #include <Windows.h>
 #include <winternl.h>
-#if DEBUG
-    #include <iostream>
-#endif
-////////////////////////////////////////////////////////////////////////////////
-#if DEBUG
-    #define ok(something) std::cout << " [+] " << something << std::endl;
-    #define fuk(something) std::cout << " [-] " << something << std::endl;
-    #define warn(something) std::cout << " [!] " << something << " [!] "<< std::endl;
-#else
-    #define ok(something)
-    #define fuk(something)
-    #define warn(something)
-#endif
+#include "DbgMacros.h"
+
 ////////////////////////////////////////////////////////////////////////////////
 
 HMODULE hNtdll = nullptr;
@@ -42,10 +32,8 @@ void* FindExportAddress(HMODULE hModule, const char* funcName)
             return (void*)((BYTE*)hModule + funcRVA);
         }
     }
-    
-    #if DEBUG
-        std::cout << "Failed to find export address of: " << funcName << "\tGetlastError message -> " << GetLastError() << std::endl;
-    #endif
+
+    fuk("Failed to find export address of: ", funcName, "\tGetlastError message -> ", GetLastError(), "\n");
     return nullptr;
 }
 
@@ -73,17 +61,13 @@ void* SysFunction(const char* function_name, ...)
             if(!dSyscall_SSN && i + 4 < 32 && pBytes[i] == 0xB8)
             {
                 dSyscall_SSN = *(DWORD*)(pBytes + i + 1);
-                #if DEBUG
-                std::cout << "SSN: 0x" << std::hex << dSyscall_SSN << std::endl;
-                #endif
+                norm("\nSSN:",CYAN" 0x", std::hex, dSyscall_SSN); 
             }
 
             if(!pCleanSyscall && i + 1 < 32 && (pBytes[i] == 0x0F || pBytes[i+1] == 0x05))
             {
                 pCleanSyscall = pBytes + i;
-                #if DEBUG
-                std::cout << "Address of the syscall: 0x" << std::hex << reinterpret_cast<void*>(pCleanSyscall) << std::endl;
-                #endif
+                norm("Address of the Syscall: ", CYAN"0x", std::hex, reinterpret_cast<void*>(pCleanSyscall), "\n\n");
             }
         }
 
@@ -164,76 +148,79 @@ int main()
         return 1;
     }
 
-    if((NTSTATUS)uintptr_t(status) == 0) {
-        ok("NtWriteFile call successful!");
-    }
-    else {
+    if((NTSTATUS)uintptr_t(status) == 0) ok("NtWriteFile call successful!");
+    else
+    {
         fuk("NtWriteFile call failed!");
         //std::cout << "Status: 0x" << std::hex << status << std::endl;
     }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    HANDLE fileHandle = nullptr;
-    UNICODE_STRING fileName;
-    OBJECT_ATTRIBUTES objAttr;
+//     HANDLE fileHandle = nullptr;
+//     UNICODE_STRING fileName;
+//     OBJECT_ATTRIBUTES objAttr;
 
-    // Create full path with windows prefix
-    WCHAR filePath[] = L"\\??\\C:\\MALWARE\\Dependencies\\Syscalls\\testfile.txt";
-    fileName.Buffer = filePath;
-    fileName.Length = wcslen(filePath) * sizeof(WCHAR);
-    fileName.MaximumLength = fileName.Length + sizeof(WCHAR);
+//     // Create full path with windows prefix
+//     WCHAR filePath[] = L"\\??\\C:\\MALWARE\\Dependencies\\Syscalls\\testfile.txt";
+//     fileName.Buffer = filePath;
+//     fileName.Length = wcslen(filePath) * sizeof(WCHAR);
+//     fileName.MaximumLength = fileName.Length + sizeof(WCHAR);
 
-    InitializeObjectAttributes(&objAttr, &fileName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+//     InitializeObjectAttributes(&objAttr, &fileName, OBJ_CASE_INSENSITIVE, NULL, NULL);
 
 
-    void* status1 = SysFunction("NtCreateFile",
-        &fileHandle, 
-        FILE_GENERIC_WRITE,
-        &objAttr,
-        &ioStatusBlock,
-        NULL,
-        FILE_ATTRIBUTE_NORMAL,
-        FILE_SHARE_READ,
-        FILE_OVERWRITE_IF,
-        FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
-        NULL,
-        0
-    );
+//     void* status1 = SysFunction("NtCreateFile",
+//         &fileHandle, 
+//         FILE_GENERIC_WRITE,
+//         &objAttr,
+//         &ioStatusBlock,
+//         NULL,
+//         FILE_ATTRIBUTE_NORMAL,
+//         FILE_SHARE_READ,
+//         FILE_OVERWRITE_IF,
+//         FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
+//         NULL,
+//         0
+//     );
 
-    if(status == (void*)(~0ull))
-    {
-        fuk("SysFunction failed");
-        return 1;
-    }
+//     if(status == (void*)(~0ull))
+//     {
+//         fuk("SysFunction failed");
+//         return 1;
+//     }
 
-    if((NTSTATUS)(uintptr_t(status1)) != 0)
-    {
-        fuk("Failed to create test file");
-        #if DEBUG
-        std::cout << "Status: 0x" << std::hex << (NTSTATUS)(uintptr_t(status1)) << std::endl;
-        #endif
-        return 1;
-    }
-    ok("File created successfully");
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
+//     if((NTSTATUS)(uintptr_t(status1)) != 0)
+//     {
+//         fuk("Failed to create test file");
+//         #if DEBUG
+//         std::cout << "Status: 0x" << std::hex << (NTSTATUS)(uintptr_t(status1)) << std::endl;
+//         #endif
+//         return 1;
+//     }
+//     ok("File created successfully");
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    status = SysFunction("NtClose", fileHandle); 
+//     status = SysFunction("NtClose", fileHandle); 
     
-    if(status == (void*)(~0ull))
-    {
-        fuk("SysFunction failed");
-        return 1;
-    }
+//     if(status == (void*)(~0ull))
+//     {
+//         fuk("SysFunction failed");
+//         return 1;
+//     }
     
-    if((NTSTATUS)(uintptr_t(status) == 0)){ok("NtClose call successful!");}
-    else
-    {
-        fuk("NtClose call failed!");
+//     if((NTSTATUS)(uintptr_t(status) == 0)){ok("NtClose call successful!");}
+//     else
+//     {
+//         fuk("NtClose call failed!");
         
-        #if DEBUG
-        std::cout << "Status: 0x" << std::hex << (NTSTATUS)(uintptr_t(status)) << std::endl;
-        #endif
-    }
+//         #if DEBUG
+//         std::cout << "Status: 0x" << std::hex << (NTSTATUS)(uintptr_t(status)) << std::endl;
+//         #endif
+//     }
 
+
+    #if DEBUG_FILE
+        details::close_log_file();
+    #endif
     return 0;
 }
