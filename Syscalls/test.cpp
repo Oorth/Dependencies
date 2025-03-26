@@ -53,21 +53,20 @@ void* SysFunction(const char* function_name, ...)
     BYTE* pBytes = reinterpret_cast<BYTE*>(vpfunction);
     if(pBytes[0] == 0x4C && pBytes[1] == 0x8B && pBytes[2] == 0xD1)
     {
-        ok("Function is Unhooked");
+        ok("Function ", function_name," is Unhooked");
         for(int i = 0; i < 32 ; ++i)
         {
             if(dSyscall_SSN != 0 && pCleanSyscall != nullptr) break;
-
             if(!dSyscall_SSN && i + 4 < 32 && pBytes[i] == 0xB8)
             {
                 dSyscall_SSN = *(DWORD*)(pBytes + i + 1);
-                norm("\nSSN:",CYAN" 0x", std::hex, dSyscall_SSN); 
+                norm("SSN:",CYAN" 0x", std::hex, dSyscall_SSN); 
             }
 
             if(!pCleanSyscall && i + 1 < 32 && (pBytes[i] == 0x0F || pBytes[i+1] == 0x05))
             {
                 pCleanSyscall = pBytes + i;
-                norm("Address of the Syscall: ", CYAN"0x", std::hex, reinterpret_cast<void*>(pCleanSyscall), "\n");
+                norm("Address of the Syscall: ", CYAN"0x", std::hex, reinterpret_cast<void*>(pCleanSyscall));
             }
         }
 
@@ -112,12 +111,13 @@ void* SysFunction(const char* function_name, ...)
         void* arg = va_arg(args, void*);
         if(arg) argList[i] = arg;
     }
-
     va_end(args);
 
-    void* retValue = syscallFunc(argList[1], argList[2], argList[3], argList[4], argList[5],
-                                argList[6], argList[7], argList[8], argList[9], argList[10],
-                                argList[11], argList[12], argList[13], argList[14], argList[15]);
+    void* retValue = nullptr;
+    retValue = syscallFunc(argList[1], argList[2], argList[3], argList[4], argList[5],
+                            argList[6], argList[7], argList[8], argList[9], argList[10],
+                            argList[11], argList[12], argList[13], argList[14], argList[15]
+    );
 
     VirtualFree(exec_mem, 0, MEM_RELEASE);
     return retValue;
@@ -137,8 +137,9 @@ int main()
     } ok("loaded ntdll");
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
+    norm(YELLOW"==============================================");
 
-    char buffer[] = "!!!!Hello from NtWriteFile syscall!!!\n\n";
+    char buffer[] = "!!!!Hello from NtWriteFile syscall!!!\n";
     ULONG length = sizeof(buffer) - 1;
 
     void* status = SysFunction("NtWriteFile", GetStdHandle(STD_OUTPUT_HANDLE), nullptr, nullptr, nullptr, &ioStatusBlock, buffer, length, nullptr, nullptr);
@@ -155,6 +156,8 @@ int main()
         fuk("NtWriteFile call failed!");
         //std::cout << "Status: 0x" << std::hex << status << std::endl;
     }
+
+    norm(YELLOW"==============================================");
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     HANDLE fileHandle = nullptr;
@@ -201,23 +204,11 @@ int main()
         return 1;
     }
     ok("File created successfully");
+
+    norm(YELLOW"==============================================");
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    status = SysFunction("NtClose", fileHandle); 
-    
-    if(status == (void*)(~0ull))
-    {
-        fuk("SysFunction failed");
-        return 1;
-    }
-    
-    if((NTSTATUS)(uintptr_t(status) == 0)){ok("NtClose call successful!");}
-    else
-    {
-        fuk("NtClose call failed!\nStatus: 0x", std::hex, (NTSTATUS)(uintptr_t(status)), "\n");
-        return 1;
-    }
-
+    norm("DONE :)");
     #if DEBUG_FILE
         details::close_log_file();
     #endif
