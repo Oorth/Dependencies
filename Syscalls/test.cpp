@@ -67,7 +67,7 @@ void* SysFunction(const char* function_name, ...)
             if(!pCleanSyscall && i + 1 < 32 && (pBytes[i] == 0x0F || pBytes[i+1] == 0x05))
             {
                 pCleanSyscall = pBytes + i;
-                norm("Address of the Syscall: ", CYAN"0x", std::hex, reinterpret_cast<void*>(pCleanSyscall), "\n\n");
+                norm("Address of the Syscall: ", CYAN"0x", std::hex, reinterpret_cast<void*>(pCleanSyscall), "\n");
             }
         }
 
@@ -87,10 +87,11 @@ void* SysFunction(const char* function_name, ...)
     {
         0xB8, 0x00, 0x00, 0x00, 0x00,   // mov eax, SSN
         0x4C, 0x8B, 0xD1,               // mov r10, rcx
-        0x0F, 0x05,                     // syscall
-        0xC3                            // ret
+        0xFF, 0x25, 0x00, 0x00, 0x00, 0x00, // jmp [rip+0]
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 // address placeholder
     };
     *(DWORD*)(syscall_code + 1) = dSyscall_SSN;
+    *(UINT64*)(syscall_code + 14) = (UINT64)pCleanSyscall;
 
     void* exec_mem = VirtualAlloc(nullptr, sizeof(syscall_code), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     if (!exec_mem)
@@ -156,68 +157,66 @@ int main()
     }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//     HANDLE fileHandle = nullptr;
-//     UNICODE_STRING fileName;
-//     OBJECT_ATTRIBUTES objAttr;
+    HANDLE fileHandle = nullptr;
+    UNICODE_STRING fileName;
+    OBJECT_ATTRIBUTES objAttr;
 
-//     // Create full path with windows prefix
-//     WCHAR filePath[] = L"\\??\\C:\\MALWARE\\Dependencies\\Syscalls\\testfile.txt";
-//     fileName.Buffer = filePath;
-//     fileName.Length = wcslen(filePath) * sizeof(WCHAR);
-//     fileName.MaximumLength = fileName.Length + sizeof(WCHAR);
-
-//     InitializeObjectAttributes(&objAttr, &fileName, OBJ_CASE_INSENSITIVE, NULL, NULL);
-
-
-//     void* status1 = SysFunction("NtCreateFile",
-//         &fileHandle, 
-//         FILE_GENERIC_WRITE,
-//         &objAttr,
-//         &ioStatusBlock,
-//         NULL,
-//         FILE_ATTRIBUTE_NORMAL,
-//         FILE_SHARE_READ,
-//         FILE_OVERWRITE_IF,
-//         FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
-//         NULL,
-//         0
-//     );
-
-//     if(status == (void*)(~0ull))
-//     {
-//         fuk("SysFunction failed");
-//         return 1;
-//     }
-
-//     if((NTSTATUS)(uintptr_t(status1)) != 0)
-//     {
-//         fuk("Failed to create test file");
-//         #if DEBUG
-//         std::cout << "Status: 0x" << std::hex << (NTSTATUS)(uintptr_t(status1)) << std::endl;
-//         #endif
-//         return 1;
-//     }
-//     ok("File created successfully");
-// //////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-//     status = SysFunction("NtClose", fileHandle); 
+    // Create full path with windows prefix
+    WCHAR filePath[MAX_PATH] = L"\\??\\";
+    WCHAR currentDir[MAX_PATH];
+    GetCurrentDirectoryW(MAX_PATH, currentDir);
+    wcscat_s(filePath, MAX_PATH, currentDir);
+    wcscat_s(filePath, MAX_PATH, L"\\testfile.txt");
     
-//     if(status == (void*)(~0ull))
-//     {
-//         fuk("SysFunction failed");
-//         return 1;
-//     }
-    
-//     if((NTSTATUS)(uintptr_t(status) == 0)){ok("NtClose call successful!");}
-//     else
-//     {
-//         fuk("NtClose call failed!");
-        
-//         #if DEBUG
-//         std::cout << "Status: 0x" << std::hex << (NTSTATUS)(uintptr_t(status)) << std::endl;
-//         #endif
-//     }
+    fileName.Buffer = filePath;
+    fileName.Length = wcslen(filePath) * sizeof(WCHAR);
+    fileName.MaximumLength = fileName.Length + sizeof(WCHAR);
 
+    InitializeObjectAttributes(&objAttr, &fileName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+
+
+    void* status1 = SysFunction("NtCreateFile",
+        &fileHandle, 
+        FILE_GENERIC_WRITE,
+        &objAttr,
+        &ioStatusBlock,
+        NULL,
+        FILE_ATTRIBUTE_NORMAL,
+        FILE_SHARE_READ,
+        FILE_OVERWRITE_IF,
+        FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
+        NULL,
+        0
+    );
+
+    if(status == (void*)(~0ull))
+    {
+        fuk("SysFunction failed");
+        return 1;
+    }
+
+    if((NTSTATUS)(uintptr_t(status1)) != 0)
+    {
+        fuk("Failed to create test file!\nStatus: ", std::hex, "0x", (NTSTATUS)(uintptr_t(status1)), "\n");
+        return 1;
+    }
+    ok("File created successfully");
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    status = SysFunction("NtClose", fileHandle); 
+    
+    if(status == (void*)(~0ull))
+    {
+        fuk("SysFunction failed");
+        return 1;
+    }
+    
+    if((NTSTATUS)(uintptr_t(status) == 0)){ok("NtClose call successful!");}
+    else
+    {
+        fuk("NtClose call failed!\nStatus: 0x", std::hex, (NTSTATUS)(uintptr_t(status)), "\n");
+        return 1;
+    }
 
     #if DEBUG_FILE
         details::close_log_file();
