@@ -157,14 +157,14 @@
             void log(const char* prefix_with_color, const char* msg, Args... args)
             {
                 #if DEBUG
-                    std::cout << prefix_with_color << msg << " ";
+                    std::cout << prefix_with_color << msg;
                     log_arg(std::cout, args...);
                     std::cout << RESET << std::endl;
                 #endif
 
                 #if DEBUG_VECTOR
                     std::stringstream ss;
-                    ss << prefix_with_color << msg << " ";
+                    ss << prefix_with_color << msg;
                     log_arg(ss, args...);
                     logged_messages.push_back(ss.str());
                 #endif
@@ -178,7 +178,7 @@
                         if (prefix_with_color == GREEN " [+] ") prefix_no_color = " [+] ";
                         else if (prefix_with_color == RED " [!] ") prefix_no_color = " [!] ";
                         else if (prefix_with_color == YELLOW " [o] ") prefix_no_color = " [o] ";
-                        ss_file << prefix_no_color << msg << " ";
+                        ss_file << prefix_no_color << msg;
                         log_arg(ss_file, args...);
                         log_output_file << ss_file.str() << std::endl;
                     }
