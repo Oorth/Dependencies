@@ -1,5 +1,5 @@
 //cl.exe /EHsc .\test.cpp /link /OUT:test.exe
-#define DEBUG 0
+#define DEBUG 1
 #define DEBUG_FILE 0
 #define DEBUG_VECTOR 0
 #define MAX_SYSCALLS 30
@@ -208,7 +208,6 @@ int main()
     
     size_t numSyscalls = 0;
     syscallEntries[numSyscalls++] = {"NtCreateFile", 0, nullptr, nullptr};
-    syscallEntries[numSyscalls++] = {"NtWriteFile", 0, nullptr, nullptr};
     syscallEntries[numSyscalls++] = {"NtWriteFile", 0, nullptr, nullptr};
     syscallEntries[numSyscalls++] = {"NtWriteVirtualMemory", 0, nullptr, nullptr};
     
