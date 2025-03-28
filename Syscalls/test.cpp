@@ -1,12 +1,15 @@
 //cl.exe /EHsc .\test.cpp /link /OUT:test.exe
-#define DEBUG 1
+#define DEBUG 0
 #define DEBUG_FILE 0
 #define DEBUG_VECTOR 0
 #define MAX_SYSCALLS 30
 
+#if DEBUG
+    #include <iomanip>
+#endif
+
 #include <Windows.h>
 #include <winternl.h>
-#include <iomanip>
 #include "DbgMacros.h"
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -51,92 +54,6 @@ void* FindExportAddress(HMODULE hModule, const char* funcName)
 
     fuk("Failed to find export address of: ", funcName, "\tGetlastError message -> ", GetLastError(), "\n");
     return nullptr;
-}
-
-void* SysFunction(const char* function_name, ...)
-{
-    void* vpfunction = nullptr;
-    BYTE* pCleanSyscall = nullptr;
-    DWORD dSyscall_SSN = 0;
-
-    vpfunction = FindExportAddress(hNtdll, function_name);
-    if(!vpfunction)
-    {
-        fuk("Couldn't find the function");
-        return (void*)(~0ull);
-    }
-
-    BYTE* pBytes = reinterpret_cast<BYTE*>(vpfunction);
-    if(pBytes[0] == 0x4C && pBytes[1] == 0x8B && pBytes[2] == 0xD1)
-    {
-        ok("Function ", function_name," is Unhooked");
-        for(int i = 0; i < 32 ; ++i)
-        {
-            if(dSyscall_SSN != 0 && pCleanSyscall != nullptr) break;
-            if(!dSyscall_SSN && i + 4 < 32 && pBytes[i] == 0xB8)
-            {
-                dSyscall_SSN = *(DWORD*)(pBytes + i + 1);
-                norm("SSN:",CYAN" 0x", std::hex, dSyscall_SSN); 
-            }
-
-            if(!pCleanSyscall && i + 1 < 32 && (pBytes[i] == 0x0F || pBytes[i+1] == 0x05))
-            {
-                pCleanSyscall = pBytes + i;
-                norm("Address of the Syscall: ", CYAN"0x", std::hex, reinterpret_cast<void*>(pCleanSyscall));
-            }
-        }
-
-        if(dSyscall_SSN == 0 || pCleanSyscall == nullptr)
-        {
-            fuk("Couldn't find either the SSN or SYSCALL");
-            return (void*)(~0ull);
-        }
-    }
-    else
-    {
-        fuk("Function might be hooked");
-        return (void*)(~0ull);
-    }   
-
-    BYTE syscall_code[] =
-    {
-        0xB8, 0x00, 0x00, 0x00, 0x00,                       // mov eax, SSN
-        0x4C, 0x8B, 0xD1,                                   // mov r10, rcx
-        0xFF, 0x25, 0x00, 0x00, 0x00, 0x00,                 // jmp [rip+0]
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00      // address placeholder
-    };
-    *(DWORD*)(syscall_code + 1) = dSyscall_SSN;
-    *(UINT64*)(syscall_code + 14) = (UINT64)pCleanSyscall;
-
-    void* exec_mem = VirtualAlloc(nullptr, sizeof(syscall_code), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-    if (!exec_mem)
-    {
-        fuk("Failed to allocate executable memory");
-        return (void*)(~0ull);
-    }
-
-    memcpy(exec_mem, syscall_code, sizeof(syscall_code));
-    GenericSyscallType syscallFunc = reinterpret_cast<GenericSyscallType>(exec_mem);
-
-    va_list args;
-    va_start(args, function_name);
-
-    void* argList[16] = {};
-    for(int i = 1; i < 16 ; ++i)
-    {
-        void* arg = va_arg(args, void*);
-        if(arg) argList[i] = arg;
-    }
-    va_end(args);
-
-    void* retValue = nullptr;
-    retValue = syscallFunc(argList[1], argList[2], argList[3], argList[4], argList[5],
-                            argList[6], argList[7], argList[8], argList[9], argList[10],
-                            argList[11], argList[12], argList[13], argList[14], argList[15]
-    );
-
-    VirtualFree(exec_mem, 0, MEM_RELEASE);
-    return retValue;
 }
 
 void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
@@ -230,6 +147,48 @@ void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
     return (void*)(1ull);
 }
 
+void* SysFunction(const char* function_name, ...)
+{
+
+    void* pExecMem = nullptr;
+
+    for(int i = 0; i < stubCount; ++i)
+    {
+        if(strcmp(syscallEntries[i].function_name, function_name) == 0)
+        {
+            pExecMem = syscallEntries[i].pStubAddress;
+            break;
+        }
+    }
+    if (!pExecMem)
+    {
+        fuk("Syscall not found: ", function_name);
+        return (void*)(~0ull);
+    }
+
+
+    GenericSyscallType syscallFunc = reinterpret_cast<GenericSyscallType>(pExecMem);
+
+    va_list args;
+    va_start(args, function_name);
+
+    void* argList[16] = {};
+    for(int i = 1; i < 16 ; ++i)
+    {
+        void* arg = va_arg(args, void*);
+        if(arg) argList[i] = arg;
+    }
+    va_end(args);
+
+    void* retValue = nullptr;
+    retValue = syscallFunc(argList[1], argList[2], argList[3], argList[4], argList[5],
+                            argList[6], argList[7], argList[8], argList[9], argList[10],
+                            argList[11], argList[12], argList[13], argList[14], argList[15]
+    );
+
+    return retValue;
+}
+
 int main()
 {
     const char* function_name;
@@ -247,107 +206,111 @@ int main()
 
     pSyscallPool = (BYTE*)VirtualAlloc(nullptr, MAX_SYSCALLS * 0x16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     
-    syscallEntries[0] = {"NtOpenProcess", 0, nullptr, nullptr};
-    syscallEntries[1] = {"NtReadVirtualMemory", 0, nullptr, nullptr};
-    syscallEntries[2] = {"NtWriteVirtualMemory", 0, nullptr, nullptr};
-
-    AddStubToPool(syscallEntries, 3);
+    size_t numSyscalls = 0;
+    syscallEntries[numSyscalls++] = {"NtCreateFile", 0, nullptr, nullptr};
+    syscallEntries[numSyscalls++] = {"NtWriteFile", 0, nullptr, nullptr};
+    syscallEntries[numSyscalls++] = {"NtWriteFile", 0, nullptr, nullptr};
+    syscallEntries[numSyscalls++] = {"NtWriteVirtualMemory", 0, nullptr, nullptr};
+    
+    AddStubToPool(syscallEntries, numSyscalls);
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     norm("==============================================");
-    for(int i = 0; i < 3; i++)
+    for(int i = 0; i < numSyscalls; i++)
     {
         norm("Function Name: ", GREEN"", syscallEntries[i].function_name);
         norm("SSN: 0x", std::hex, CYAN"",syscallEntries[i].SSN);
-        norm("Stub Address: 0x", std::hex, syscallEntries[i].pStubAddress);
-        norm("Clean Syscall Address: 0x", std::hex, (void*)syscallEntries[i].pCleanSyscall);
+        norm("Stub Address: 0x", std::hex, CYAN"", syscallEntries[i].pStubAddress);
+        norm("Clean Syscall Address: 0x", std::hex, CYAN"", (void*)syscallEntries[i].pCleanSyscall);
         norm("------------------------");
     }
 
-    norm("\nSyscall Pool Contents:");
-    for(int i = 0; i < MAX_SYSCALLS * 0x16; i++)
-    {
-        if(i % 16 == 0) std::cout << "\n" << std::hex << std::setw(4) << std::setfill('0') << i << ": ";
-        std::cout << std::hex << std::setw(2) << std::setfill('0') << (int)pSyscallPool[i] << " ";
-    }
-    std::cout << "\n";
+    #if DEBUG
+        norm("\nSyscall Pool Contents:");
+        for(int i = 0; i < MAX_SYSCALLS * 0x16; i++)
+        {
+            if(i % 16 == 0) std::cout << YELLOW"\n" << std::hex << std::setw(4) << std::setfill('0') << i << CYAN": ";
+            std::cout << std::hex << std::setw(2) << std::setfill('0') << CYAN"" <<(int)pSyscallPool[i] << " ";
+        }
+        std::cout << RESET"\n";
+    #endif
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-//     norm(YELLOW"==============================================");
+    norm(YELLOW"==============================================");
 
-//     char buffer[] = "!!!!Hello from NtWriteFile syscall!!!\n";
-//     ULONG length = sizeof(buffer) - 1;
+    char buffer[] = "!!!!Hello from NtWriteFile syscall!!!\n";
+    ULONG length = sizeof(buffer) - 1;
 
-//     void* status = SysFunction("NtWriteFile", GetStdHandle(STD_OUTPUT_HANDLE), nullptr, nullptr, nullptr, &ioStatusBlock, buffer, length, nullptr, nullptr);
+    void* status = SysFunction("NtWriteFile", GetStdHandle(STD_OUTPUT_HANDLE), nullptr, nullptr, nullptr, &ioStatusBlock, buffer, length, nullptr, nullptr);
 
-//     if(status == (void*)(~0ull))
-//     {
-//         fuk("SysFunction failed");
-//         return 1;
-//     }
+    if(status == (void*)(~0ull))
+    {
+        fuk("SysFunction failed");
+        return 1;
+    }
 
-//     if((NTSTATUS)uintptr_t(status) == 0) ok("NtWriteFile call successful!");
-//     else
-//     {
-//         fuk("NtWriteFile call failed!");
-//         //std::cout << "Status: 0x" << std::hex << status << std::endl;
-//     }
+    if((NTSTATUS)uintptr_t(status) == 0) ok("NtWriteFile call successful!");
+    else
+    {
+        fuk("NtWriteFile call failed!");
+        //std::cout << "Status: 0x" << std::hex << status << std::endl;
+    }
 
-//     norm(YELLOW"==============================================");
+    norm(YELLOW"==============================================");
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//     HANDLE fileHandle = nullptr;
-//     UNICODE_STRING fileName;
-//     OBJECT_ATTRIBUTES objAttr;
+    HANDLE fileHandle = nullptr;
+    UNICODE_STRING fileName;
+    OBJECT_ATTRIBUTES objAttr;
 
-//     // Create full path with windows prefix
-//     WCHAR filePath[MAX_PATH] = L"\\??\\";
-//     WCHAR currentDir[MAX_PATH];
-//     GetCurrentDirectoryW(MAX_PATH, currentDir);
-//     wcscat_s(filePath, MAX_PATH, currentDir);
-//     wcscat_s(filePath, MAX_PATH, L"\\testfile.txt");
+    // Create full path with windows prefix
+    WCHAR filePath[MAX_PATH] = L"\\??\\";
+    WCHAR currentDir[MAX_PATH];
+    GetCurrentDirectoryW(MAX_PATH, currentDir);
+    wcscat_s(filePath, MAX_PATH, currentDir);
+    wcscat_s(filePath, MAX_PATH, L"\\testfile.txt");
     
-//     fileName.Buffer = filePath;
-//     fileName.Length = wcslen(filePath) * sizeof(WCHAR);
-//     fileName.MaximumLength = fileName.Length + sizeof(WCHAR);
+    fileName.Buffer = filePath;
+    fileName.Length = wcslen(filePath) * sizeof(WCHAR);
+    fileName.MaximumLength = fileName.Length + sizeof(WCHAR);
 
-//     InitializeObjectAttributes(&objAttr, &fileName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    InitializeObjectAttributes(&objAttr, &fileName, OBJ_CASE_INSENSITIVE, NULL, NULL);
 
 
-//     void* status1 = SysFunction("NtCreateFile",
-//         &fileHandle, 
-//         FILE_GENERIC_WRITE,
-//         &objAttr,
-//         &ioStatusBlock,
-//         NULL,
-//         FILE_ATTRIBUTE_NORMAL,
-//         FILE_SHARE_READ,
-//         FILE_OVERWRITE_IF,
-//         FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
-//         NULL,
-//         0
-//     );
+    void* status1 = SysFunction("NtCreateFile",
+        &fileHandle, 
+        FILE_GENERIC_WRITE,
+        &objAttr,
+        &ioStatusBlock,
+        NULL,
+        FILE_ATTRIBUTE_NORMAL,
+        FILE_SHARE_READ,
+        FILE_OVERWRITE_IF,
+        FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
+        NULL,
+        0
+    );
 
-//     if(status == (void*)(~0ull))
-//     {
-//         fuk("SysFunction failed");
-//         return 1;
-//     }
+    if(status == (void*)(~0ull))
+    {
+        fuk("SysFunction failed");
+        return 1;
+    }
 
-//     if((NTSTATUS)(uintptr_t(status1)) != 0)
-//     {
-//         fuk("Failed to create test file!\nStatus: ", std::hex, "0x", (NTSTATUS)(uintptr_t(status1)), "\n");
-//         return 1;
-//     }
-//     ok("File created successfully");
+    if((NTSTATUS)(uintptr_t(status1)) != 0)
+    {
+        fuk("Failed to create test file!\nStatus: ", std::hex, "0x", (NTSTATUS)(uintptr_t(status1)), "\n");
+        return 1;
+    }
+    ok("File created successfully");
 
-//     norm(YELLOW"==============================================");
-// //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    norm(YELLOW"==============================================");
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     norm("DONE :)");
-//     #if DEBUG_FILE
-//         details::close_log_file();
-//     #endif
+    #if DEBUG_FILE
+        details::close_log_file();
+    #endif
     return 0;
 }
