@@ -1,4 +1,14 @@
 //cl.exe /EHsc .\test.cpp /link /OUT:test.exe
+/*
+
+    Done with making dynamically obsfuscated stub for 
+            SSN command (Integration pending)
+            to do -> for other 2 commands 
+            [mov needs changing]
+            [did not start jump]
+*/
+
+#define LEAN_AND_MEAN
 #define DEBUG 1
 #define DEBUG_FILE 0
 #define DEBUG_VECTOR 0
@@ -54,6 +64,117 @@ void* FindExportAddress(HMODULE hModule, const char* funcName)
 
     fuk("Failed to find export address of: ", funcName, "\tGetlastError message -> ", GetLastError(), "\n");
     return nullptr;
+}
+
+void* GenerateSyscallStub(Sys_stb* sEntry)
+{
+    //BYTE syscall_code[32] = {0};
+
+    // int offset = rand() % 3;
+    // for(int i = 0; i < offset; i++)                // Add initial random NOPs
+    // {
+    //     syscall_code[i] = 0x90;                               // nop
+    // }
+
+
+
+    size_t Size_Of_SSN_Part = 0;
+    BYTE* pSSNpart = nullptr, *pMOVpart = nullptr, *pJMPpart = nullptr;
+
+    //for mov eax, SSN
+    int variant = rand() % 3;
+    switch(variant)
+    {
+        case 0:                                                                                           //WORKS
+        {
+            DWORD ssn = sEntry->SSN;
+            BYTE lowByte = (BYTE)(ssn & 0xFF);
+            DWORD highBytes = (ssn & 0xFFFFFF00);
+
+            BYTE temp_code[] = 
+            {
+                0x31, 0xC0,                                         // xor eax, eax
+                0xB0, 0x00,                                         // mov al, SSN_LOW
+                0x81, 0xC0, 0x00, 0x00, 0x00, 0x00                  // add eax, SSN_HIGH_SHIFTED
+            };
+            *(BYTE*)(temp_code + 3) = lowByte;
+            *(DWORD*)(temp_code + 6) = highBytes;
+
+            Size_Of_SSN_Part = sizeof(temp_code);
+            pSSNpart = new BYTE[Size_Of_SSN_Part];
+
+            for(size_t i = 0; i < Size_Of_SSN_Part; i++) pSSNpart[i] = temp_code[i];
+        
+        }break;
+
+        case 1:                                                                                              //WORKS
+        {
+            BYTE randNum = (BYTE)(rand() % 0x50);
+
+            BYTE temp_code[] =
+            {
+                0xB8, 0x00, 0x00, 0x00, 0x00,                    // mov eax, X
+                0x05, 0x00, 0x00, 0x00, 0x00                     // add eax, Y
+            };
+            *(DWORD*)(temp_code + 1) = randNum;
+            *(DWORD*)(temp_code + 6) = sEntry->SSN - randNum;
+
+            Size_Of_SSN_Part = sizeof(temp_code);
+            pSSNpart = new BYTE[Size_Of_SSN_Part];
+
+            for(size_t i = 0; i < Size_Of_SSN_Part; i++) pSSNpart[i] = temp_code[i];
+        }break;
+
+        case 2:
+        {   
+            BYTE temp_code[] =
+            {
+                0x9C,                                        // pushfq (save flags)
+                
+                0x31, 0xC0,                                   // xor eax, eax
+                0x68, 0x00, 0x00, 0x00, 0x00,                   // push SSN
+                0x58,                                           // pop rax (SSN -> rax)
+
+                0x9D,                                        // popfq (restore flags)
+            };
+            *(DWORD*)(temp_code + 4) = sEntry->SSN;
+
+            Size_Of_SSN_Part = sizeof(temp_code);
+            pSSNpart = new BYTE[Size_Of_SSN_Part];
+            
+            for(size_t i = 0; i < Size_Of_SSN_Part; i++) pSSNpart[i] = temp_code[i];
+
+        }break;
+    }
+
+    //now we have SSNpart and Size_Of_SSN_Part
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    
+    //now for mov r10, rcx
+
+    variant = rand() % 3;
+    size_t Size_Of_MOV_Part = 0;
+    BYTE* MOVpart = nullptr;
+
+    switch(variant)
+    {
+        case 0:
+        {
+            BYTE temp_code[] = 
+            {
+                0x4D, 0x31, 0xD2,                                   //xor r10, r10
+                0x49, 0x01, 0xD2                                    //add r10, rdx
+            };
+            
+        }break;
+    }
+
+
+    delete[] pSSNpart;
+    delete[] pMOVpart;
+    delete[] pJMPpart;
+
+    return (void*)(~0ULL);
 }
 
 void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
@@ -112,15 +233,100 @@ void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
         ok("Done ", sEntry[j].function_name);
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        BYTE syscall_code[] =
+        BYTE syscall_code[32] = {0};
+        
+        //------------------------------------------------------------------------------------
+
+        int offset = rand() % 3;
+        for(int i = 0; i < offset; i++)                // Add initial random NOPs
         {
-            0xB8, 0x00, 0x00, 0x00, 0x00,                       // mov eax, SSN
-            0x4C, 0x8B, 0xD1,                                   // mov r10, rcx
-            0xFF, 0x25, 0x00, 0x00, 0x00, 0x00,                 // jmp [rip+0]
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00      // address placeholder
+            syscall_code[i] = 0x90;                               // nop
+        }
+
+        // Choose random SSN loading variant
+        // switch(rand() % 4)
+        switch(rand() % 1)  // Change to more variants when needed
+        {
+            case 0:
+            {   norm(RED"IN CASE 0");
+                BYTE temp_code[] =
+                {
+                    0xB8, 0x00, 0x00, 0x00, 0x00                 // mov eax, SSN
+                };
+
+                *(DWORD*)(temp_code + 1) = sEntry[j].SSN;
+                memcpy(syscall_code + offset, temp_code, sizeof(temp_code));
+                offset += sizeof(temp_code);
+            break;
+            }
+        }
+        //------------------------------------------------------------------------------------------
+
+        // mov r10, rcx
+        // BYTE mov_r10_rcx[] =
+        // {
+        //     0x4C, 0x8B, 0xD1                                    // mov r10, rcx
+        // };
+        // memcpy(syscall_code + offset, mov_r10_rcx, sizeof(mov_r10_rcx));
+        // offset += sizeof(mov_r10_rcx);
+
+        //offset = rand() % 3;
+        switch(2)
+        {
+            case 0:                                                                             //NO works !!!!!!!
+            {   norm(RED"in 0");                                                                             
+                BYTE tempcode[] = 
+                {
+                    0x50,                           // push rax
+                    0x48, 0x89, 0xC8,               // mov rax, rcx
+                    // 0x48, 0x83, 0xC0, 0x01,      // add rax, 1
+                    0x48, 0x89, 0xC2,               // mov rdx, rax
+                    // 0x48, 0x83, 0xEA, 0x01,      // sub rdx, 1
+                    0x49, 0x89, 0xD2,               // mov r10, rdx
+                    0x58                            // pop rax
+                };
+                memcpy(syscall_code + offset, tempcode, sizeof(tempcode));
+                offset += sizeof(tempcode);
+            break;
+            }
+
+            case 1:                                                                             //works
+            {norm(RED"in 1");
+                BYTE mov_r10_rcx[] =
+                {
+                    0x4C, 0x8B, 0xD1                                    // mov r10, rcx
+                };
+                memcpy(syscall_code + offset, mov_r10_rcx, sizeof(mov_r10_rcx));
+                offset += sizeof(mov_r10_rcx);
+            break;
+            }
+
+            case 2:
+            {norm(RED"in 2");                                                                   //works
+                BYTE tempcode[] = 
+                {
+                    0x4D, 0x31, 0xD2,               // xor r10, r10
+                    0x49, 0x89, 0xCA                // mov r10, rcx 
+                };
+                memcpy(syscall_code + offset, tempcode, sizeof(tempcode));
+                offset += sizeof(tempcode);
+                break;
+            }
+        }
+        //-------------------------------------------------------------------------------------------
+
+        for(int i = 0; i < (rand() % 6); i++) syscall_code[offset++] = 0x90;                      // nop
+
+        // jmp to syscall
+        BYTE jmp_code[] =
+        {
+            0xFF, 0x25, 0x00, 0x00, 0x00, 0x00,                // jmp [rip+0]
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00     // syscall address
         };
-        *(DWORD*)(syscall_code + 1) = sEntry[j].SSN;
-        *(UINT64*)(syscall_code + 14) = (UINT64)sEntry[j].pCleanSyscall;
+        *(UINT64*)(jmp_code + 6) = (UINT64)sEntry[j].pCleanSyscall;
+        memcpy(syscall_code + offset, jmp_code, sizeof(jmp_code));
+
+        /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         if(stubOffset + sizeof(syscall_code) > MAX_SYSCALLS * sizeof(syscall_code))
         {
@@ -136,13 +342,14 @@ void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
         ++stubCount;
     }
 
-    // // Ensure memory is executable
-    // DWORD oldProtect;
-    // if (!VirtualProtect(pSyscallPool, stubOffset, PAGE_EXECUTE_READ, &oldProtect))
-    // {
-    //     fuk("Failed to set RX permissions for syscall stubs.");
-    //     return (void*)(~0ull);
-    // } ok("Memory is executble");
+    // Ensure memory is executable
+    DWORD oldProtect;
+    if (!VirtualProtect(pSyscallPool, stubOffset, PAGE_EXECUTE_READ, &oldProtect))
+    {
+        fuk("Failed to set RX permissions for syscall stubs.");
+        return (void*)(~0ull);
+    } 
+    ok("Memory is executable");
 
     return (void*)(1ull);
 }
@@ -191,6 +398,7 @@ void* SysFunction(const char* function_name, ...)
 
 int main()
 {
+    srand(static_cast<unsigned>(time(nullptr)));
     const char* function_name;
     DWORD dSSN = 0;
     IO_STATUS_BLOCK ioStatusBlock = {};
@@ -207,9 +415,9 @@ int main()
     pSyscallPool = (BYTE*)VirtualAlloc(nullptr, MAX_SYSCALLS * 0x16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     
     size_t numSyscalls = 0;
-    syscallEntries[numSyscalls++] = {"NtCreateFile", 0, nullptr, nullptr};
+    // syscallEntries[numSyscalls++] = {"NtCreateFile", 0, nullptr, nullptr};
     syscallEntries[numSyscalls++] = {"NtWriteFile", 0, nullptr, nullptr};
-    syscallEntries[numSyscalls++] = {"NtWriteVirtualMemory", 0, nullptr, nullptr};
+    // syscallEntries[numSyscalls++] = {"NtWriteVirtualMemory", 0, nullptr, nullptr};
     
     AddStubToPool(syscallEntries, numSyscalls);
 
@@ -227,7 +435,7 @@ int main()
 
     #if DEBUG
         norm("\nSyscall Pool Contents:");
-        for(int i = 0; i < MAX_SYSCALLS * 0x16; i++)
+        for(int i = 0; i < numSyscalls * 0x30; i++)
         {
             if(i % 16 == 0) std::cout << YELLOW"\n" << std::hex << std::setw(4) << std::setfill('0') << i << CYAN": ";
             std::cout << std::hex << std::setw(2) << std::setfill('0') << CYAN"" <<(int)pSyscallPool[i] << " ";
@@ -253,59 +461,60 @@ int main()
     else
     {
         fuk("NtWriteFile call failed!");
+        return 1;
         //std::cout << "Status: 0x" << std::hex << status << std::endl;
     }
 
     norm(YELLOW"==============================================");
-// //////////////////////////////////////////////////////////////////////////////////////////////////////////
+// // //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    HANDLE fileHandle = nullptr;
-    UNICODE_STRING fileName;
-    OBJECT_ATTRIBUTES objAttr;
+//     HANDLE fileHandle = nullptr;
+//     UNICODE_STRING fileName;
+//     OBJECT_ATTRIBUTES objAttr;
 
-    // Create full path with windows prefix
-    WCHAR filePath[MAX_PATH] = L"\\??\\";
-    WCHAR currentDir[MAX_PATH];
-    GetCurrentDirectoryW(MAX_PATH, currentDir);
-    wcscat_s(filePath, MAX_PATH, currentDir);
-    wcscat_s(filePath, MAX_PATH, L"\\testfile.txt");
+//     // Create full path with windows prefix
+//     WCHAR filePath[MAX_PATH] = L"\\??\\";
+//     WCHAR currentDir[MAX_PATH];
+//     GetCurrentDirectoryW(MAX_PATH, currentDir);
+//     wcscat_s(filePath, MAX_PATH, currentDir);
+//     wcscat_s(filePath, MAX_PATH, L"\\testfile.txt");
     
-    fileName.Buffer = filePath;
-    fileName.Length = wcslen(filePath) * sizeof(WCHAR);
-    fileName.MaximumLength = fileName.Length + sizeof(WCHAR);
+//     fileName.Buffer = filePath;
+//     fileName.Length = wcslen(filePath) * sizeof(WCHAR);
+//     fileName.MaximumLength = fileName.Length + sizeof(WCHAR);
 
-    InitializeObjectAttributes(&objAttr, &fileName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+//     InitializeObjectAttributes(&objAttr, &fileName, OBJ_CASE_INSENSITIVE, NULL, NULL);
 
 
-    void* status1 = SysFunction("NtCreateFile",
-        &fileHandle, 
-        FILE_GENERIC_WRITE,
-        &objAttr,
-        &ioStatusBlock,
-        NULL,
-        FILE_ATTRIBUTE_NORMAL,
-        FILE_SHARE_READ,
-        FILE_OVERWRITE_IF,
-        FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
-        NULL,
-        0
-    );
+//     void* status1 = SysFunction("NtCreateFile",
+//         &fileHandle, 
+//         FILE_GENERIC_WRITE,
+//         &objAttr,
+//         &ioStatusBlock,
+//         NULL,
+//         FILE_ATTRIBUTE_NORMAL,
+//         FILE_SHARE_READ,
+//         FILE_OVERWRITE_IF,
+//         FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
+//         NULL,
+//         0
+//     );
 
-    if(status == (void*)(~0ull))
-    {
-        fuk("SysFunction failed");
-        return 1;
-    }
+//     if(status == (void*)(~0ull))
+//     {
+//         fuk("SysFunction failed");
+//         return 1;
+//     }
 
-    if((NTSTATUS)(uintptr_t(status1)) != 0)
-    {
-        fuk("Failed to create test file!\nStatus: ", std::hex, "0x", (NTSTATUS)(uintptr_t(status1)), "\n");
-        return 1;
-    }
-    ok("File created successfully");
+//     if((NTSTATUS)(uintptr_t(status1)) != 0)
+//     {
+//         fuk("Failed to create test file!\nStatus: ", std::hex, "0x", (NTSTATUS)(uintptr_t(status1)), "\n");
+//         return 1;
+//     }
+//     ok("File created successfully");
 
-    norm(YELLOW"==============================================");
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+//     norm(YELLOW"==============================================");
+//     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     norm("DONE :)");
     #if DEBUG_FILE
