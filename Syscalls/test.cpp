@@ -2,10 +2,7 @@
 /*
 
     Done with making dynamically obsfuscated stub for 
-            SSN command (Integration pending)
-            to do -> for other 2 commands 
-            [mov needs changing]
-            [did not start jump]
+        to add more obsfucation for mov and jmp
 */
 
 #define LEAN_AND_MEAN
@@ -71,9 +68,12 @@ void* FindExportAddress(HMODULE hModule, const char* funcName)
 BYTE* GenerateSyscallStub(Sys_stb* sEntry)
 {
     BYTE* syscall_code = new BYTE[64]();
-    BYTE nop[] = {0x90};
+    BYTE nop[] = {0x90}, pushf[] = {0x9c}, popf[] = {0x9d};
     int offset = 0;
 
+    
+    // memcpy(syscall_code + offset, pushf, sizeof(pushf));
+    // ++offset;
     //===============================================================================================
 
     //Add random Nops
@@ -175,8 +175,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
 
     ///////////////////////////////////////////////MOV/////////////////////////////////////////////// 
 
-    //switch(rand() % 3)
-    switch(0)
+    switch(rand() % 4)
     {  
         case 0:                                                     // xor and mov
         {
@@ -185,6 +184,57 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
             {
                 0x4D, 0x31, 0xD2,                   // xor r10, r10
                 0x49, 0x89, 0xCA                    // mov r10, rcx 
+            };
+            memcpy(syscall_code + offset, tempcode, sizeof(tempcode));
+            offset += sizeof(tempcode);
+        break;
+        }
+
+        case 1:                                                     // and then move
+        {
+            norm(RED"in 1 [move]");
+
+            BYTE tempcode[] = 
+            {
+                0x9c,                                       // pushf
+                0x49, 0x81, 0xE2, 0x00, 0x00, 0x00, 0x00,   // and r10, 0
+                0x49, 0x89, 0xCA,                           // mov r10, rcx
+                0x9d                                        // popf
+            };
+            memcpy(syscall_code + offset, tempcode, sizeof(tempcode));
+            offset += sizeof(tempcode);
+        
+            break;
+        }
+
+        case 2:                                                     // push move pop
+        {   
+            norm(RED"in 2 [move]");                                                                             
+            BYTE tempcode[] = 
+            {
+                0x9c,                                       // pushf
+                0x51,                                       // push rcx
+                0x4C, 0x8B, 0x14, 0x24,                     // mov r10, [rsp]
+                0x59,                                       // pop rcx
+                0x9d                                        // popf
+            };
+            memcpy(syscall_code + offset, tempcode, sizeof(tempcode));
+            offset += sizeof(tempcode);
+        
+            break;
+        }
+
+        case 3:                                                     // push xor xchg pop
+        {
+            norm(RED"in 3 [move]");
+            BYTE tempcode[] = 
+            {
+                0x9c,                           // pushf
+                0x51,                           // push rcx
+                0x49, 0x31, 0xD2,               // xor r10, r10
+                0x4C, 0x87, 0x14, 0x24,         // xchg r10, [rsp]
+                0x59,                           // pop rcx
+                0x9d                            // popf
             };
             memcpy(syscall_code + offset, tempcode, sizeof(tempcode));
             offset += sizeof(tempcode);
@@ -236,7 +286,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
             break;
         }
 
-        case 1:                                                     // Push + ret technique [Works]
+        case 1:                                                     // Push + ret technique
         {
             norm(RED"in 1 [jmp]\n");
             BYTE jmp_code[] =
@@ -281,6 +331,9 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // memcpy(syscall_code + offset, popf, sizeof(popf));
+    // ++offset;
 
     // #if DEBUG
     //     norm("\nSyscall Code Contents:");
