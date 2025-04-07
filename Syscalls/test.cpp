@@ -1,4 +1,4 @@
-//cl.exe /EHsc .\test.cpp \Od /link /OUT:test.exe
+//cl.exe /EHsc .\test.cpp /link /OUT:test.exe
 /*
 
     Done with making dynamically obsfuscated stub for 
@@ -12,8 +12,8 @@
 #define DEBUG 1
 #define DEBUG_FILE 0
 #define DEBUG_VECTOR 0
-
 #define MAX_SYSCALLS 30
+
 #if DEBUG
     #include <iomanip>
 #endif
@@ -39,9 +39,6 @@ struct Sys_stb
 BYTE* pSyscallPool = nullptr;
 Sys_stb syscallEntries[MAX_SYSCALLS];
 size_t stubCount = 0, stubOffset = 0;
-size_t numSyscalls = 0;
-
-BYTE* stubAddress = nullptr;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -69,102 +66,22 @@ void* FindExportAddress(HMODULE hModule, const char* funcName)
     return nullptr;
 }
 
-void* GenerateSyscallStub(Sys_stb* sEntry)
+BYTE* GenerateSyscallStub(Sys_stb* sEntry)
 {
-    //BYTE syscall_code[32] = {0};
+    BYTE* syscall_code = new BYTE[32]();
+    int offset = 0;
 
-    // int offset = rand() % 3;
-    // for(int i = 0; i < offset; i++)                // Add initial random NOPs
+    //===============================================================================================
+
+    //Add random Nops
+    // for(int i = 0; i < rand() % 3; i++)                // Add initial random NOPs
     // {
-    //     syscall_code[i] = 0x90;                               // nop
+    //     syscall_code[i] = 0x90;                        
+    //     ++offset;
     // }
 
+    ///////////////////////////////////////////////SSN///////////////////////////////////////////////
 
-
-    // size_t Size_Of_SSN_Part = 0;
-    // BYTE* pSSNpart = nullptr, *pMOVpart = nullptr, *pJMPpart = nullptr;
-
-    // //for mov eax, SSN
-    // int variant = rand() % 3;
-    // switch(variant)
-    // {
-    //     case 0:                                                                                           //WORKS
-    //     {
-    //         DWORD ssn = sEntry->SSN;
-    //         BYTE lowByte = (BYTE)(ssn & 0xFF);
-    //         DWORD highBytes = (ssn & 0xFFFFFF00);
-
-    //         BYTE temp_code[] = 
-    //         {
-    //             0x31, 0xC0,                                         // xor eax, eax
-    //             0xB0, 0x00,                                         // mov al, SSN_LOW
-    //             0x81, 0xC0, 0x00, 0x00, 0x00, 0x00                  // add eax, SSN_HIGH_SHIFTED
-    //         };
-    //         *(BYTE*)(temp_code + 3) = lowByte;
-    //         *(DWORD*)(temp_code + 6) = highBytes;
-
-    //         Size_Of_SSN_Part = sizeof(temp_code);
-    //         pSSNpart = new BYTE[Size_Of_SSN_Part];
-
-    //         for(size_t i = 0; i < Size_Of_SSN_Part; i++) pSSNpart[i] = temp_code[i];
-        
-    //     }break;
-
-    //     case 1:                                                                                              //WORKS
-    //     {
-    //         BYTE randNum = (BYTE)(rand() % 0x50);
-
-    //         BYTE temp_code[] =
-    //         {
-    //             0xB8, 0x00, 0x00, 0x00, 0x00,                    // mov eax, X
-    //             0x05, 0x00, 0x00, 0x00, 0x00                     // add eax, Y
-    //         };
-    //         *(DWORD*)(temp_code + 1) = randNum;
-    //         *(DWORD*)(temp_code + 6) = sEntry->SSN - randNum;
-
-    //         Size_Of_SSN_Part = sizeof(temp_code);
-    //         pSSNpart = new BYTE[Size_Of_SSN_Part];
-
-    //         for(size_t i = 0; i < Size_Of_SSN_Part; i++) pSSNpart[i] = temp_code[i];
-    //     }break;
-
-    //     case 2:
-    //     {   
-    //         BYTE temp_code[] =
-    //         {
-    //             0x9C,                                        // pushfq (save flags)
-                
-    //             0x31, 0xC0,                                   // xor eax, eax
-    //             0x68, 0x00, 0x00, 0x00, 0x00,                   // push SSN
-    //             0x58,                                           // pop rax (SSN -> rax)
-
-    //             0x9D,                                        // popfq (restore flags)
-    //         };
-    //         *(DWORD*)(temp_code + 4) = sEntry->SSN;
-
-    //         Size_Of_SSN_Part = sizeof(temp_code);
-    //         pSSNpart = new BYTE[Size_Of_SSN_Part];
-            
-    //         for(size_t i = 0; i < Size_Of_SSN_Part; i++) pSSNpart[i] = temp_code[i];
-
-    //     }break;
-    // }
-
-    //now we have SSNpart and Size_Of_SSN_Part
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    
-    BYTE syscall_code[32] = {0};
-        
-    //------------------------------------------------------------------------------------
-
-    int offset = rand() % 3;
-    for(int i = 0; i < offset; i++)                // Add initial random NOPs
-    {
-        syscall_code[i] = 0x90;                               // nop
-    }
-
-    // ------------------------------Choose random SSN loading variant-----------------------------------------
-    // switch(rand() % 4)
     switch(rand() % 1)  // Change to more variants when needed
     {
         case 0:
@@ -173,106 +90,59 @@ void* GenerateSyscallStub(Sys_stb* sEntry)
             {
                 0xB8, 0x00, 0x00, 0x00, 0x00                 // mov eax, SSN
             };
-
             *(DWORD*)(temp_code + 1) = sEntry->SSN;
+
             memcpy(syscall_code + offset, temp_code, sizeof(temp_code));
             offset += sizeof(temp_code);
-        break;
+        
+            break;
         }
     }
-    //----------------------------Choose random move variant--------------------------------------------------------
 
-    //mov r10, rcx
-    BYTE mov_r10_rcx[] =
+    //===============================================================================================
+
+    //Add random Nops
+    // for(int i = 0; i < rand() % 3; i++)                // Add random NOPs
+    // {
+    //     syscall_code[i] = 0x90;                        
+    //     ++offset;
+    // }
+
+    ///////////////////////////////////////////////MOV/////////////////////////////////////////////// 
+
+    switch(rand() % 1)
     {
-        0x4C, 0x8B, 0xD1                                    // mov r10, rcx
-    };
-    memcpy(syscall_code + offset, mov_r10_rcx, sizeof(mov_r10_rcx));
-    offset += sizeof(mov_r10_rcx);
+        case 0:                                                                             
+        {   norm(RED"in 0 [MOV]");                                                                             
 
-    offset = rand() % 3;
-    switch(2) // Adding more obfuscation variants
-    {
-        case 0:                                                                             // Overflow
-        {   
-            norm(RED"in 0 [move variant]");                                                                             
-            BYTE tempcode[] = 
-            {
-                0x51,                           // push rcx
-                0x48, 0x89, 0xD1,               // mov rcx, rdx
-                0x49, 0x89, 0xD2,               // mov r10, rsp
-                0x59                            // pop rcx
-            };
-            memcpy(syscall_code + offset, tempcode, sizeof(tempcode));
-            offset += sizeof(tempcode);
-        break;
-        }
-
-        case 1:                                                                             // works [Default]
-        {
-            norm(RED"in 1 [move variant]");
             BYTE mov_r10_rcx[] =
             {
                 0x4C, 0x8B, 0xD1                                    // mov r10, rcx
             };
+            
             memcpy(syscall_code + offset, mov_r10_rcx, sizeof(mov_r10_rcx));
             offset += sizeof(mov_r10_rcx);
-        break;
-        }
-
-        case 2:                                                                             // works [but not good]
-        {
-            norm(RED"in 2 [move variant]");
-            BYTE tempcode[] = 
-            {
-                0x4D, 0x31, 0xD2,                   // xor r10, r10
-                0x49, 0x89, 0xCA                    // mov r10, rcx 
-            };
-            memcpy(syscall_code + offset, tempcode, sizeof(tempcode));
-            offset += sizeof(tempcode);
-        break;
-        }
-
-        case 3:                                                                             // No work
-        {
-            norm(RED"in 3 [move variant]");
-            BYTE tempcode[] = 
-            {
-                0x49, 0x89, 0xD2,               // mov r10, rdx
-                0x4D, 0x31, 0xC9,               // xor r9, r9
-                0x4D, 0x01, 0xCA                // add r10, r9
-            };
-            memcpy(syscall_code + offset, tempcode, sizeof(tempcode));
-            offset += sizeof(tempcode);
-        break;
-        }
-
-        case 4:                                                                             // No work
-        {
-        norm(RED"in 4 [move variant]");
-            BYTE tempcode[] = 
-            {
-                0x4D, 0x89, 0xC2,               // mov r10, r8
-                0x4C, 0x8B, 0xD1,               // mov r10, rcx
-                0x4D, 0x31, 0xD2                // xor r10, r10
-            };
-            memcpy(syscall_code + offset, tempcode, sizeof(tempcode));
-            offset += sizeof(tempcode);
-        break;
+        
+            break;
         }
     }
-    //-------------------------------------------------------------------------------------------
 
-    for(int i = 0; i < (rand() % 6) + 1; i++) syscall_code[offset++] = 0x90;                      // nop
-    
-    //-----------------------Choose random jmp variant--------------------------------------------
-    
-    // jmp to syscall
-    // Choose random jump variant
-    switch(1)
+    //===============================================================================================
+
+    //Add random Nops
+    // for(int i = 0; i < rand() % 3; i++)                // Add random NOPs
+    // {
+    //     syscall_code[i] = 0x90;                        
+    //     ++offset;
+    // }
+
+    ///////////////////////////////////////////////JMP/////////////////////////////////////////////// 
+
+    switch(rand() % 1)
     {
-        case 0:                                                 // Direct jmp with memory address [Works]
-        {norm(RED"in 0 [jmp variant]\n");
+        case 0:                                                                             
+        {   norm(RED"in 0 [JMP]");                                                                             
+
             BYTE jmp_code[] =
             {
                 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00,                // jmp [rip+0]
@@ -282,64 +152,39 @@ void* GenerateSyscallStub(Sys_stb* sEntry)
             
             memcpy(syscall_code + offset, jmp_code, sizeof(jmp_code));
             offset += sizeof(jmp_code);
-        }
-        break;
 
-        case 1:                                                     // Push + ret technique [Works]
-        {norm(RED"in 1 [jmp variant]\n");
-            BYTE jmp_code[] =
-            {
-                0x50,                                               // push rax
-                0x48, 0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // mov rax, syscall_addr
-                0x48, 0x87, 0x04, 0x24,                           // xchg rax, [rsp]
-                0xC3                                              // ret
-            };
-            *(UINT64*)(jmp_code + 3) = (UINT64)sEntry->pCleanSyscall;
-            
-            memcpy(syscall_code + offset, jmp_code, sizeof(jmp_code));
-            offset += sizeof(jmp_code);
+            break;
         }
-        break;
-
-        case 2:                                                     // Call + pop + jmp technique [NO WORK]
-        {norm(RED"in 2 [jmp variant]\n");
-            BYTE jmp_code[] =
-            {
-                0xE8, 0x00, 0x00, 0x00, 0x00,                // call next instruction
-                0x58,                                         // pop rax
-                0x48, 0x05, 0x00, 0x00, 0x00, 0x00,         // add rax, offset_to_syscall
-                0xFF, 0xE0                                   // jmp rax
-            };
-
-            // Calculate offset from pop rax to syscall
-            UINT32 offset_to_syscall = (UINT32)((UINT64)sEntry->pCleanSyscall - ((UINT64)stubAddress + offset + sizeof(jmp_code)));
-            
-            *(UINT32*)(jmp_code + 8) = offset_to_syscall;
-            
-            memcpy(syscall_code + offset, jmp_code, sizeof(jmp_code));
-            offset += sizeof(jmp_code);
-        }
-        break;
     }
 
-    if(stubOffset + sizeof(syscall_code) > MAX_SYSCALLS * sizeof(syscall_code))
-    {
-        fuk("The Syscall Pool is full");
-        return (void*)(~0ull);
-    }
+    //===============================================================================================
 
-    stubAddress = pSyscallPool + stubOffset;
-    for (size_t i = 0; i < sizeof(syscall_code); i++) stubAddress[i] = syscall_code[i];
-    
-    sEntry->pStubAddress = stubAddress;
-    stubOffset += sizeof(syscall_code);
-    ++stubCount;
+    //Add random Nops
+    // for(int i = 0; i < rand() % 3; i++)                // Add random NOPs
+    // {
+    //     syscall_code[i] = 0x90;                        
+    //     ++offset;
+    // }
 
-    return (void*)(~0ULL);
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // #if DEBUG
+    //     norm("\nSyscall Code Contents:");
+    //     for(int i = 0; i < 32; i++) // Assuming max size of syscall_code is 32 bytes
+    //     {
+    //         if(i % 16 == 0) std::cout << YELLOW"\n" << std::hex << std::setw(4) << std::setfill('0') << i << CYAN": ";
+    //         std::cout << std::hex << std::setw(2) << std::setfill('0') << CYAN"" << (int)syscall_code[i] << " ";
+    //     }
+    //     std::cout << RESET"\n";
+    // #endif
+
+
+    return syscall_code;
 }
 
 void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
 {
+    BYTE* stubAddress = nullptr;
 
     if(stubCount >= MAX_SYSCALLS)
     {
@@ -393,191 +238,20 @@ void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
         ok("Done ", sEntry[j].function_name);
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        //BYTE syscall_code[32] = {0};
+        BYTE* syscall_code = GenerateSyscallStub(sEntry);
+
+        if(stubOffset + 32 > MAX_SYSCALLS * 32)
+        {
+            fuk("The Syscall Pool is full");
+            return (void*)(~0ull);
+        }
+
+        stubAddress = pSyscallPool + stubOffset;
+        for (size_t i = 0; i < 32; i++) stubAddress[i] = syscall_code[i];
         
-        // //------------------------------------------------------------------------------------
-
-        // int offset = rand() % 3;
-        // for(int i = 0; i < offset; i++)                // Add initial random NOPs
-        // {
-        //     syscall_code[i] = 0x90;                               // nop
-        // }
-
-        // // ------------------------------Choose random SSN loading variant-----------------------------------------
-        // // switch(rand() % 4)
-        // switch(rand() % 1)  // Change to more variants when needed
-        // {
-        //     case 0:
-        //     {   norm(RED"IN CASE 0 [SSN]");
-        //         BYTE temp_code[] =
-        //         {
-        //             0xB8, 0x00, 0x00, 0x00, 0x00                 // mov eax, SSN
-        //         };
-
-        //         *(DWORD*)(temp_code + 1) = sEntry[j].SSN;
-        //         memcpy(syscall_code + offset, temp_code, sizeof(temp_code));
-        //         offset += sizeof(temp_code);
-        //     break;
-        //     }
-        // }
-        // //----------------------------Choose random move variant--------------------------------------------------------
-
-        // mov r10, rcx
-        // BYTE mov_r10_rcx[] =
-        // {
-        //     0x4C, 0x8B, 0xD1                                    // mov r10, rcx
-        // };
-        // memcpy(syscall_code + offset, mov_r10_rcx, sizeof(mov_r10_rcx));
-        // offset += sizeof(mov_r10_rcx);
-
-        //offset = rand() % 3;
-        // switch(2) // Adding more obfuscation variants
-        // {
-        //     case 0:                                                                             // Overflow
-        //     {   
-        //         norm(RED"in 0 [move variant]");                                                                             
-        //         BYTE tempcode[] = 
-        //         {
-        //             0x51,                           // push rcx
-        //             0x48, 0x89, 0xD1,               // mov rcx, rdx
-        //             0x49, 0x89, 0xD2,               // mov r10, rsp
-        //             0x59                            // pop rcx
-        //         };
-        //         memcpy(syscall_code + offset, tempcode, sizeof(tempcode));
-        //         offset += sizeof(tempcode);
-        //     break;
-        //     }
-
-        //     case 1:                                                                             // works [Default]
-        //     {
-        //         norm(RED"in 1 [move variant]");
-        //         BYTE mov_r10_rcx[] =
-        //         {
-        //             0x4C, 0x8B, 0xD1                                    // mov r10, rcx
-        //         };
-        //         memcpy(syscall_code + offset, mov_r10_rcx, sizeof(mov_r10_rcx));
-        //         offset += sizeof(mov_r10_rcx);
-        //     break;
-        //     }
-
-        //     case 2:                                                                             // works [but not good]
-        //     {
-        //         norm(RED"in 2 [move variant]");
-        //         BYTE tempcode[] = 
-        //         {
-        //             0x4D, 0x31, 0xD2,                   // xor r10, r10
-        //             0x49, 0x89, 0xCA                    // mov r10, rcx 
-        //         };
-        //         memcpy(syscall_code + offset, tempcode, sizeof(tempcode));
-        //         offset += sizeof(tempcode);
-        //     break;
-        //     }
-
-        //     case 3:                                                                             // No work
-        //     {
-        //         norm(RED"in 3 [move variant]");
-        //         BYTE tempcode[] = 
-        //         {
-        //             0x49, 0x89, 0xD2,               // mov r10, rdx
-        //             0x4D, 0x31, 0xC9,               // xor r9, r9
-        //             0x4D, 0x01, 0xCA                // add r10, r9
-        //         };
-        //         memcpy(syscall_code + offset, tempcode, sizeof(tempcode));
-        //         offset += sizeof(tempcode);
-        //     break;
-        //     }
-
-        //     case 4:                                                                             // No work
-        //     {
-        //     norm(RED"in 4 [move variant]");
-        //         BYTE tempcode[] = 
-        //         {
-        //             0x4D, 0x89, 0xC2,               // mov r10, r8
-        //             0x4C, 0x8B, 0xD1,               // mov r10, rcx
-        //             0x4D, 0x31, 0xD2                // xor r10, r10
-        //         };
-        //         memcpy(syscall_code + offset, tempcode, sizeof(tempcode));
-        //         offset += sizeof(tempcode);
-        //     break;
-        //     }
-        // }
-        // //-------------------------------------------------------------------------------------------
-
-        // for(int i = 0; i < (rand() % 6) + 1; i++) syscall_code[offset++] = 0x90;                      // nop
-        
-        // //-----------------------Choose random jmp variant--------------------------------------------
-        
-        // // jmp to syscall
-        // // Choose random jump variant
-        // switch(1)
-        // {
-        //     case 0:                                                 // Direct jmp with memory address [Works]
-        //     {norm(RED"in 0 [jmp variant]\n");
-        //         BYTE jmp_code[] =
-        //         {
-        //             0xFF, 0x25, 0x00, 0x00, 0x00, 0x00,                // jmp [rip+0]
-        //             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00     // syscall address
-        //         };
-        //         *(UINT64*)(jmp_code + 6) = (UINT64)sEntry[j].pCleanSyscall;
-                
-        //         memcpy(syscall_code + offset, jmp_code, sizeof(jmp_code));
-        //         offset += sizeof(jmp_code);
-        //     }
-        //     break;
-
-        //     case 1:                                                     // Push + ret technique [Works]
-        //     {norm(RED"in 1 [jmp variant]\n");
-        //         BYTE jmp_code[] =
-        //         {
-        //             0x50,                                               // push rax
-        //             0x48, 0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // mov rax, syscall_addr
-        //             0x48, 0x87, 0x04, 0x24,                           // xchg rax, [rsp]
-        //             0xC3                                              // ret
-        //         };
-        //         *(UINT64*)(jmp_code + 3) = (UINT64)sEntry[j].pCleanSyscall;
-                
-        //         memcpy(syscall_code + offset, jmp_code, sizeof(jmp_code));
-        //         offset += sizeof(jmp_code);
-        //     }
-        //     break;
-
-        //     case 2:                                                     // Call + pop + jmp technique [NO WORK]
-        //     {norm(RED"in 2 [jmp variant]\n");
-        //         BYTE jmp_code[] =
-        //         {
-        //             0xE8, 0x00, 0x00, 0x00, 0x00,                // call next instruction
-        //             0x58,                                         // pop rax
-        //             0x48, 0x05, 0x00, 0x00, 0x00, 0x00,         // add rax, offset_to_syscall
-        //             0xFF, 0xE0                                   // jmp rax
-        //         };
-
-        //         // Calculate offset from pop rax to syscall
-        //         UINT32 offset_to_syscall = (UINT32)((UINT64)sEntry[j].pCleanSyscall - ((UINT64)stubAddress + offset + sizeof(jmp_code)));
-                
-        //         *(UINT32*)(jmp_code + 8) = offset_to_syscall;
-                
-        //         memcpy(syscall_code + offset, jmp_code, sizeof(jmp_code));
-        //         offset += sizeof(jmp_code);
-        //     }
-        //     break;
-        // }
-
-        /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-        // if(stubOffset + sizeof(syscall_code) > MAX_SYSCALLS * sizeof(syscall_code))
-        // {
-        //     fuk("The Syscall Pool is full");
-        //     return (void*)(~0ull);
-        // }
-
-        // stubAddress = pSyscallPool + stubOffset;
-        // for (size_t i = 0; i < sizeof(syscall_code); i++) stubAddress[i] = syscall_code[i];
-        
-        // sEntry[j].pStubAddress = stubAddress;
-        // stubOffset += sizeof(syscall_code);
-        // ++stubCount;
-
-        GenerateSyscallStub(sEntry);
+        sEntry[j].pStubAddress = stubAddress;
+        stubOffset += 32;
+        ++stubCount;
     }
 
     // Ensure memory is executable
@@ -588,16 +262,6 @@ void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
         return (void*)(~0ull);
     } 
     ok("Memory is executable");
-
-    #if DEBUG
-        norm("\nSyscall Pool Contents:");
-        for(int i = 0; i < numSyscalls * 0x30; i++)
-        {
-            if(i % 16 == 0) std::cout << YELLOW"\n" << std::hex << std::setw(4) << std::setfill('0') << i << CYAN": ";
-            std::cout << std::hex << std::setw(2) << std::setfill('0') << CYAN"" <<(int)pSyscallPool[i] << " ";
-        }
-        std::cout << RESET"\n";
-    #endif
 
     return (void*)(1ull);
 }
@@ -662,6 +326,7 @@ int main()
 
     pSyscallPool = (BYTE*)VirtualAlloc(nullptr, MAX_SYSCALLS * 0x16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     
+    size_t numSyscalls = 0;
     // syscallEntries[numSyscalls++] = {"NtCreateFile", 0, nullptr, nullptr};
     syscallEntries[numSyscalls++] = {"NtWriteFile", 0, nullptr, nullptr};
     // syscallEntries[numSyscalls++] = {"NtWriteVirtualMemory", 0, nullptr, nullptr};
@@ -671,24 +336,24 @@ int main()
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     norm("==============================================");
-    for(int i = 0; i < numSyscalls; i++)
-    {
-        norm("Function Name: ", GREEN"", syscallEntries[i].function_name);
-        norm("SSN: 0x", std::hex, CYAN"",syscallEntries[i].SSN);
-        norm("Stub Address: 0x", std::hex, CYAN"", syscallEntries[i].pStubAddress);
-        norm("Clean Syscall Address: 0x", std::hex, CYAN"", (void*)syscallEntries[i].pCleanSyscall);
-        norm("------------------------");
-    }
+    // for(int i = 0; i < numSyscalls; i++)
+    // {
+    //     norm("Function Name: ", GREEN"", syscallEntries[i].function_name);
+    //     norm("SSN: 0x", std::hex, CYAN"",syscallEntries[i].SSN);
+    //     norm("Stub Address: 0x", std::hex, CYAN"", syscallEntries[i].pStubAddress);
+    //     norm("Clean Syscall Address: 0x", std::hex, CYAN"", (void*)syscallEntries[i].pCleanSyscall);
+    //     norm("------------------------");
+    // }
 
-    // #if DEBUG
-    //     norm("\nSyscall Pool Contents:");
-    //     for(int i = 0; i < numSyscalls * 0x30; i++)
-    //     {
-    //         if(i % 16 == 0) std::cout << YELLOW"\n" << std::hex << std::setw(4) << std::setfill('0') << i << CYAN": ";
-    //         std::cout << std::hex << std::setw(2) << std::setfill('0') << CYAN"" <<(int)pSyscallPool[i] << " ";
-    //     }
-    //     std::cout << RESET"\n";
-    // #endif
+    #if DEBUG
+        norm("\nSyscall Pool Contents:");
+        for(int i = 0; i < numSyscalls * 0x30; i++)
+        {
+            if(i % 16 == 0) std::cout << YELLOW"\n" << std::hex << std::setw(4) << std::setfill('0') << i << CYAN": ";
+            std::cout << std::hex << std::setw(2) << std::setfill('0') << CYAN"" <<(int)pSyscallPool[i] << " ";
+        }
+        std::cout << RESET"\n";
+    #endif
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
     norm(YELLOW"==============================================");
@@ -704,14 +369,12 @@ int main()
         return 1;
     }
 
-    NTSTATUS ntStatus = (NTSTATUS)(uintptr_t)status;
-    if(ntStatus == 0) ok("NtWriteFile call successful!");
+    if((NTSTATUS)uintptr_t(status) == 0) ok("NtWriteFile call successful!");
     else
     {
         fuk("NtWriteFile call failed!");
-        norm("Status -> 0x", std::hex, RED"", status);
-        // std::cout << "Status: 0x" << std::hex << status << std::endl;
         return 1;
+        //std::cout << "Status: 0x" << std::hex << status << std::endl;
     }
 
     norm(YELLOW"==============================================");
