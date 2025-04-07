@@ -77,7 +77,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
     //===============================================================================================
 
     //Add random Nops
-    for(int i = 0; i < rand() % 3; i++)                // Add random NOPs
+    for(int i = 0; i < rand() % 3; ++i)                // Add random NOPs
     {
         memcpy(syscall_code + offset, nop, sizeof(nop));                      
         ++offset;
@@ -167,7 +167,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
 
     //===============================================================================================
     //Add random Nops
-    for(int i = 0; i < rand() % 3; i++)                // Add random NOPs
+    for(int i = 0; i < rand() % 3; ++i)                // Add random NOPs
     {
         memcpy(syscall_code + offset, nop, sizeof(nop));                      
         ++offset;
@@ -208,7 +208,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
 
     //===============================================================================================
     //Add random Nops
-    for(int i = 0; i < rand() % 3; i++)                // Add random NOPs
+    for(int i = 0; i < rand() % 3; ++i)                // Add random NOPs
     {
         memcpy(syscall_code + offset, nop, sizeof(nop));                      
         ++offset;
@@ -274,7 +274,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
     //===============================================================================================
 
     //Add random Nops
-    for(int i = 0; i < rand() % 3; i++)                // Add random NOPs
+    for(int i = 0; i < rand() % 3; ++i)                // Add random NOPs
     {
         memcpy(syscall_code + offset, nop, sizeof(nop));                      
         ++offset;
@@ -284,7 +284,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
 
     // #if DEBUG
     //     norm("\nSyscall Code Contents:");
-    //     for(int i = 0; i < SIZE_OF_SYSCALL_CODE; i++)
+    //     for(int i = 0; i < SIZE_OF_SYSCALL_CODE; ++i)
     //     {
     //         if(i % 16 == 0) std::cout << YELLOW"\n" << std::hex << std::setw(4) << std::setfill('0') << i << CYAN": ";
     //         std::cout << std::hex << std::setw(2) << std::setfill('0') << CYAN"" << std::setw(2) << std::setfill('0') << (int)syscall_code[i] << " ";
@@ -322,7 +322,7 @@ void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
         if(pBytes[0] == 0x4C && pBytes[1] == 0x8B && pBytes[2] == 0xD1)
         {
             ok("Function ", sEntry[j].function_name," is Unhooked");
-            for(int i = 0; i < 32; i++)
+            for(int i = 0; i < 32; ++i)
             {
                 if(sEntry[j].SSN != 0 && sEntry[j].pCleanSyscall != nullptr) break;
                 if(!sEntry[j].SSN && i + 4 < 32 && pBytes[i] == 0xB8)
@@ -362,7 +362,7 @@ void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
         }
 
         stubAddress = pSyscallPool + stubOffset;
-        for (size_t i = 0; i < SIZE_OF_SYSCALL_CODE; i++) stubAddress[i] = syscall_code[i];
+        for (size_t i = 0; i < SIZE_OF_SYSCALL_CODE; ++i) stubAddress[i] = syscall_code[i];
         
         sEntry[j].pStubAddress = stubAddress;
         stubOffset += SIZE_OF_SYSCALL_CODE;
@@ -451,7 +451,7 @@ int main()
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     norm("==============================================");
-    // for(int i = 0; i < numSyscalls; i++)
+    // for(int i = 0; i < numSyscalls; ++i)
     // {
     //     norm("Function Name: ", GREEN"", syscallEntries[i].function_name);
     //     norm("SSN: 0x", std::hex, CYAN"",syscallEntries[i].SSN);
@@ -462,7 +462,7 @@ int main()
 
     #if DEBUG
         norm("\nSyscall Pool Contents:");
-        for(int i = 0; i < SIZE_OF_SYSCALL_CODE; i++) // Assuming max size of syscall_code is 32 bytes
+        for(int i = 0; i < SIZE_OF_SYSCALL_CODE; ++i) // Assuming max size of syscall_code is 32 bytes
         {
             if(i % 16 == 0) std::cout << YELLOW"\n" << std::hex << std::setw(4) << std::setfill('0') << i << CYAN": ";
             std::cout << std::hex << std::setw(2) << std::setfill('0') << CYAN"" << std::setw(2) << std::setfill('0') << (int)pSyscallPool[i] << " ";
