@@ -1,8 +1,11 @@
 //cl.exe /EHsc .\test.cpp /link /OUT:test.exe
 /*
 
-    Done with making dynamically obsfuscated stub for 
-        to add more obsfucation for mov and jmp
+    Both functions work individually......
+    but both together dont
+
+    something to do with !syscall Stub part
+
 */
 
 #define LEAN_AND_MEAN
@@ -13,7 +16,7 @@
 #define MAX_SYSCALLS 30
 #define SIZE_OF_SYSCALL_CODE 64
 
-#if DEBUG
+#if DEBUG | DEBUG_FILE
     #include <iomanip>
 #endif
 
@@ -84,6 +87,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
 
     ///////////////////////////////////////////////SSN///////////////////////////////////////////////
 
+    // switch(9)
     switch(rand() % 3)
     {  
         case 0:                                                     // HIGH_LOW
@@ -174,6 +178,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
 
     ///////////////////////////////////////////////MOV/////////////////////////////////////////////// 
 
+    //switch(9)
     switch(rand() % 4)
     {  
         case 0:                                                     // xor and mov
@@ -265,7 +270,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
 
     ///////////////////////////////////////////////JMP/////////////////////////////////////////////// 
 
-    //switch(2)
+    //switch(9)
     switch(rand() % 3)
     {
         case 0:                                                     // push and xchg
@@ -429,7 +434,7 @@ void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
         ok("Done ", sEntry[j].function_name, "\n");
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        BYTE* syscall_code = GenerateSyscallStub(sEntry);
+        BYTE* syscall_code = GenerateSyscallStub(&sEntry[j]);
 
         if(stubOffset + SIZE_OF_SYSCALL_CODE > MAX_SYSCALLS * SIZE_OF_SYSCALL_CODE)
         {
@@ -441,8 +446,8 @@ void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
         for (size_t i = 0; i < SIZE_OF_SYSCALL_CODE; ++i) stubAddress[i] = syscall_code[i];
         
         sEntry[j].pStubAddress = stubAddress;
-        // stubOffset += SIZE_OF_SYSCALL_CODE;
         stubOffset += sEntry->stubsize;
+
         ++stubCount;
     }
 
@@ -539,7 +544,7 @@ int main()
 
     #if DEBUG
         norm("\nSyscall Pool Contents:");
-        for(int i = 0; i < SIZE_OF_SYSCALL_CODE * 2; ++i) // Assuming max size of syscall_code is 32 bytes
+        for(int i = 0; i < SIZE_OF_SYSCALL_CODE * numSyscalls; ++i) // Assuming max size of syscall_code is 32 bytes
         {
             if(i % 16 == 0) std::cout << YELLOW"\n" << std::hex << std::setw(4) << std::setfill('0') << i << CYAN": ";
             std::cout << std::hex << std::setw(2) << std::setfill('0') << CYAN"" << std::setw(2) << std::setfill('0') << (int)pSyscallPool[i] << " ";
@@ -561,7 +566,7 @@ int main()
         return 1;
     }
 
-    if((NTSTATUS)uintptr_t(status) == 0) ok("NtWriteFile call successful!\n");
+    if((NTSTATUS)uintptr_t(status) == 0) ok("NtWriteFile call successful!");
     else
     {
         fuk("NtWriteFile call failed!\n");
@@ -604,18 +609,18 @@ int main()
         0
     );
 
-    if(status == (void*)(~0ull))
-    {
-        fuk("SysFunction failed\n");
-        return 1;
-    }
+    // if(status == (void*)(~0ull))
+    // {
+    //     fuk("SysFunction failed\n");
+    //     return 1;
+    // }
 
     if((NTSTATUS)(uintptr_t(status1)) != 0)
     {
-        fuk("Failed to create test file!\nStatus: ", std::hex, "0x", (NTSTATUS)(uintptr_t(status1)), "\n");
+        fuk("Failed to create test file! Status: ", std::hex, "0x", (NTSTATUS)(uintptr_t(status1)));
         return 1;
     }
-    ok("File created successfully\n");
+    ok("File created successfully");
 
     norm(YELLOW"\n==============================================\n");
 //     //////////////////////////////////////////////////////////////////////////////////////////////////////////
