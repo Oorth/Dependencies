@@ -31,6 +31,7 @@ struct Sys_stb
 {
     const char* function_name;
     DWORD SSN;
+    size_t stubsize;
     void* pStubAddress;
     BYTE* pCleanSyscall;
 };
@@ -38,7 +39,6 @@ struct Sys_stb
 BYTE* pSyscallPool = nullptr;
 Sys_stb syscallEntries[MAX_SYSCALLS];
 size_t stubCount = 0, stubOffset = 0;
-
 ////////////////////////////////////////////////////////////////////////////////
 
 void* FindExportAddress(HMODULE hModule, const char* funcName)
@@ -69,18 +69,17 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
 {
     BYTE* syscall_code = new BYTE[64]();
     BYTE nop[] = {0x90}, pushf[] = {0x9c}, popf[] = {0x9d};
-    int offset = 0;
-
+    size_t Generate_Syscall_Offset = 0;
     
-    // memcpy(syscall_code + offset, pushf, sizeof(pushf));
-    // ++offset;
+    // memcpy(syscall_code + Generate_Syscall_Offset, pushf, sizeof(pushf));
+    // ++Generate_Syscall_Offset;
     //===============================================================================================
 
     //Add random Nops
     for(int i = 0; i < rand() % 3; ++i)                // Add random NOPs
     {
-        memcpy(syscall_code + offset, nop, sizeof(nop));                      
-        ++offset;
+        memcpy(syscall_code + Generate_Syscall_Offset, nop, sizeof(nop));                      
+        ++Generate_Syscall_Offset;
     }
 
     ///////////////////////////////////////////////SSN///////////////////////////////////////////////
@@ -104,8 +103,8 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
             *(BYTE*)(temp_code + 3) = lowByte;
             *(DWORD*)(temp_code + 6) = highBytes;
 
-            memcpy(syscall_code + offset, temp_code, sizeof(temp_code));           
-            offset += sizeof(temp_code);
+            memcpy(syscall_code + Generate_Syscall_Offset, temp_code, sizeof(temp_code));           
+            Generate_Syscall_Offset += sizeof(temp_code);
 
             break;
         }
@@ -123,8 +122,8 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
             *(DWORD*)(temp_code + 1) = randNum;
             *(DWORD*)(temp_code + 6) = sEntry->SSN - randNum;
 
-            memcpy(syscall_code + offset, temp_code, sizeof(temp_code));           
-            offset += sizeof(temp_code);
+            memcpy(syscall_code + Generate_Syscall_Offset, temp_code, sizeof(temp_code));           
+            Generate_Syscall_Offset += sizeof(temp_code);
             
             break;
         }
@@ -144,8 +143,8 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
             };
             *(DWORD*)(temp_code + 4) = sEntry->SSN;
             
-            memcpy(syscall_code + offset, temp_code, sizeof(temp_code));           
-            offset += sizeof(temp_code);
+            memcpy(syscall_code + Generate_Syscall_Offset, temp_code, sizeof(temp_code));           
+            Generate_Syscall_Offset += sizeof(temp_code);
 
             break;
         }
@@ -158,8 +157,8 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
             };
             *(DWORD*)(temp_code + 1) = sEntry->SSN;
 
-            memcpy(syscall_code + offset, temp_code, sizeof(temp_code));
-            offset += sizeof(temp_code);
+            memcpy(syscall_code + Generate_Syscall_Offset, temp_code, sizeof(temp_code));
+            Generate_Syscall_Offset += sizeof(temp_code);
         
             break;
         }
@@ -169,8 +168,8 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
     //Add random Nops
     for(int i = 0; i < rand() % 3; ++i)                // Add random NOPs
     {
-        memcpy(syscall_code + offset, nop, sizeof(nop));                      
-        ++offset;
+        memcpy(syscall_code + Generate_Syscall_Offset, nop, sizeof(nop));                      
+        ++Generate_Syscall_Offset;
     }
 
     ///////////////////////////////////////////////MOV/////////////////////////////////////////////// 
@@ -185,8 +184,8 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
                 0x4D, 0x31, 0xD2,                   // xor r10, r10
                 0x49, 0x89, 0xCA                    // mov r10, rcx 
             };
-            memcpy(syscall_code + offset, tempcode, sizeof(tempcode));
-            offset += sizeof(tempcode);
+            memcpy(syscall_code + Generate_Syscall_Offset, tempcode, sizeof(tempcode));
+            Generate_Syscall_Offset += sizeof(tempcode);
         break;
         }
 
@@ -201,8 +200,8 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
                 0x49, 0x89, 0xCA,                           // mov r10, rcx
                 0x9d                                        // popf
             };
-            memcpy(syscall_code + offset, tempcode, sizeof(tempcode));
-            offset += sizeof(tempcode);
+            memcpy(syscall_code + Generate_Syscall_Offset, tempcode, sizeof(tempcode));
+            Generate_Syscall_Offset += sizeof(tempcode);
         
             break;
         }
@@ -218,8 +217,8 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
                 0x59,                                       // pop rcx
                 0x9d                                        // popf
             };
-            memcpy(syscall_code + offset, tempcode, sizeof(tempcode));
-            offset += sizeof(tempcode);
+            memcpy(syscall_code + Generate_Syscall_Offset, tempcode, sizeof(tempcode));
+            Generate_Syscall_Offset += sizeof(tempcode);
         
             break;
         }
@@ -236,8 +235,8 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
                 0x59,                           // pop rcx
                 0x9d                            // popf
             };
-            memcpy(syscall_code + offset, tempcode, sizeof(tempcode));
-            offset += sizeof(tempcode);
+            memcpy(syscall_code + Generate_Syscall_Offset, tempcode, sizeof(tempcode));
+            Generate_Syscall_Offset += sizeof(tempcode);
         break;
         }
 
@@ -249,8 +248,8 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
                 0x4C, 0x8B, 0xD1                                    // mov r10, rcx
             };
             
-            memcpy(syscall_code + offset, mov_r10_rcx, sizeof(mov_r10_rcx));
-            offset += sizeof(mov_r10_rcx);
+            memcpy(syscall_code + Generate_Syscall_Offset, mov_r10_rcx, sizeof(mov_r10_rcx));
+            Generate_Syscall_Offset += sizeof(mov_r10_rcx);
         
             break;
         }
@@ -260,14 +259,14 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
     //Add random Nops
     for(int i = 0; i < rand() % 3; ++i)                // Add random NOPs
     {
-        memcpy(syscall_code + offset, nop, sizeof(nop));                      
-        ++offset;
+        memcpy(syscall_code + Generate_Syscall_Offset, nop, sizeof(nop));                      
+        ++Generate_Syscall_Offset;
     }
 
     ///////////////////////////////////////////////JMP/////////////////////////////////////////////// 
 
-    //switch(rand() % 3)
-    switch(2)
+    //switch(2)
+    switch(rand() % 3)
     {
         case 0:                                                     // push and xchg
         {   
@@ -281,8 +280,8 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
             };
             *(UINT64*)(jmp_code + 3) = (UINT64)sEntry->pCleanSyscall;
             
-            memcpy(syscall_code + offset, jmp_code, sizeof(jmp_code));
-            offset += sizeof(jmp_code);
+            memcpy(syscall_code + Generate_Syscall_Offset, jmp_code, sizeof(jmp_code));
+            Generate_Syscall_Offset += sizeof(jmp_code);
 
             break;
         }
@@ -299,8 +298,8 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
             };
             *(UINT64*)(jmp_code + 3) = (UINT64)sEntry->pCleanSyscall;
             
-            memcpy(syscall_code + offset, jmp_code, sizeof(jmp_code));
-            offset += sizeof(jmp_code);
+            memcpy(syscall_code + Generate_Syscall_Offset, jmp_code, sizeof(jmp_code));
+            Generate_Syscall_Offset += sizeof(jmp_code);
 
             break;
         }
@@ -322,8 +321,8 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
             *(DWORD*)(jmp_code + 5) = (DWORD)((UINT64)sEntry->pCleanSyscall & 0xFFFFFFFF);
             *(DWORD*)(jmp_code + 13) = (DWORD)((UINT64)sEntry->pCleanSyscall >> 32);
 
-            memcpy(syscall_code + offset, jmp_code, sizeof(jmp_code));
-            offset += sizeof(jmp_code);
+            memcpy(syscall_code + Generate_Syscall_Offset, jmp_code, sizeof(jmp_code));
+            Generate_Syscall_Offset += sizeof(jmp_code);
 
             break;
         }
@@ -338,8 +337,8 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
             };
             *(UINT64*)(jmp_code + 6) = (UINT64)sEntry->pCleanSyscall;
             
-            memcpy(syscall_code + offset, jmp_code, sizeof(jmp_code));
-            offset += sizeof(jmp_code);
+            memcpy(syscall_code + Generate_Syscall_Offset, jmp_code, sizeof(jmp_code));
+            Generate_Syscall_Offset += sizeof(jmp_code);
 
             break;
         }
@@ -350,24 +349,26 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
     //Add random Nops
     for(int i = 0; i < rand() % 3; ++i)                // Add random NOPs
     {
-        memcpy(syscall_code + offset, nop, sizeof(nop));                      
-        ++offset;
+        memcpy(syscall_code + Generate_Syscall_Offset, nop, sizeof(nop));                      
+        ++Generate_Syscall_Offset;
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // memcpy(syscall_code + offset, popf, sizeof(popf));
-    // ++offset;
+    // memcpy(syscall_code + Generate_Syscall_Offset, popf, sizeof(popf));
+    // ++Generate_Syscall_Offset;
 
-    // #if DEBUG
-    //     norm("\nSyscall Code Contents:");
-    //     for(int i = 0; i < SIZE_OF_SYSCALL_CODE; ++i)
-    //     {
-    //         if(i % 16 == 0) std::cout << YELLOW"\n" << std::hex << std::setw(4) << std::setfill('0') << i << CYAN": ";
-    //         std::cout << std::hex << std::setw(2) << std::setfill('0') << CYAN"" << std::setw(2) << std::setfill('0') << (int)syscall_code[i] << " ";
-    //     }
-    //     std::cout << RESET"\n";
-    // #endif
+    sEntry->stubsize = Generate_Syscall_Offset;
+
+    #if DEBUG
+        norm("Syscall Code Contents:");
+        for(int i = 0; i < SIZE_OF_SYSCALL_CODE; ++i)
+        {
+            if(i % 16 == 0) std::cout << YELLOW"\n" << std::hex << std::setw(4) << std::setfill('0') << i << CYAN": ";
+            std::cout << std::hex << std::setw(2) << std::setfill('0') << CYAN"" << std::setw(2) << std::setfill('0') << (int)syscall_code[i] << " ";
+        }
+        std::cout << RESET"\n";
+    #endif
 
     return syscall_code;
 }
@@ -396,7 +397,7 @@ void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
         BYTE* pBytes = reinterpret_cast<BYTE*>(vpfunction);
         if(pBytes[0] == 0x4C && pBytes[1] == 0x8B && pBytes[2] == 0xD1)
         {
-            ok("Function ", sEntry[j].function_name," is Unhooked\n");
+            norm("\n");ok("Function ", sEntry[j].function_name," is Unhooked\n");
             for(int i = 0; i < 32; ++i)
             {
                 if(sEntry[j].SSN != 0 && sEntry[j].pCleanSyscall != nullptr) break;
@@ -440,7 +441,8 @@ void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
         for (size_t i = 0; i < SIZE_OF_SYSCALL_CODE; ++i) stubAddress[i] = syscall_code[i];
         
         sEntry[j].pStubAddress = stubAddress;
-        stubOffset += SIZE_OF_SYSCALL_CODE;
+        // stubOffset += SIZE_OF_SYSCALL_CODE;
+        stubOffset += sEntry->stubsize;
         ++stubCount;
     }
 
@@ -517,8 +519,8 @@ int main()
     pSyscallPool = (BYTE*)VirtualAlloc(nullptr, MAX_SYSCALLS * 0x16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     
     size_t numSyscalls = 0;
-    syscallEntries[numSyscalls++] = {"NtWriteFile", 0, nullptr, nullptr};
-    syscallEntries[numSyscalls++] = {"NtCreateFile", 0, nullptr, nullptr};
+    syscallEntries[numSyscalls++] = {"NtWriteFile", 0, 0, nullptr, nullptr};
+    syscallEntries[numSyscalls++] = {"NtCreateFile", 0, 0, nullptr, nullptr};
     // syscallEntries[numSyscalls++] = {"NtWriteVirtualMemory", 0, nullptr, nullptr};
     
     AddStubToPool(syscallEntries, numSyscalls);
