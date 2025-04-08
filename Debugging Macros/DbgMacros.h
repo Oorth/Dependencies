@@ -127,7 +127,7 @@
                 #if DEBUG
                     std::cout << prefix_with_color;
                     log_arg(std::cout, args...);
-                    std::cout << std::endl; // RESET is handled in log_arg
+                    std::cout; // RESET is handled in log_arg
                 #endif
 
                 #if DEBUG_VECTOR
@@ -148,7 +148,7 @@
                         else if (prefix_with_color == YELLOW " [o] ") prefix_no_color = " [o] ";
                         ss_file << prefix_no_color;
                         log_arg(ss_file, args...);
-                        log_output_file << ss_file.str() << std::endl;
+                        log_output_file << ss_file.str();
                     }
                 #endif
             }
@@ -159,7 +159,7 @@
                 #if DEBUG
                     std::cout << prefix_with_color << msg;
                     log_arg(std::cout, args...);
-                    std::cout << RESET << std::endl;
+                    std::cout << RESET;
                 #endif
 
                 #if DEBUG_VECTOR
@@ -180,7 +180,7 @@
                         else if (prefix_with_color == YELLOW " [o] ") prefix_no_color = " [o] ";
                         ss_file << prefix_no_color << msg;
                         log_arg(ss_file, args...);
-                        log_output_file << ss_file.str() << std::endl;
+                        log_output_file << ss_file.str();
                     }
                 #endif
             }
