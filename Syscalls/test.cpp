@@ -89,7 +89,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
     {  
         case 0:                                                     // HIGH_LOW
         {   
-            norm(RED"IN 0 [SSN]"); 
+            norm(YELLOW"in 0 [SSN] "); 
 
             DWORD ssn = sEntry->SSN;
             BYTE lowByte = (BYTE)(ssn & 0xFF);
@@ -112,7 +112,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
 
         case 1:                                                     // ADD_RANDOM
         {
-            norm(RED"IN 1 [SSN]");
+            norm(YELLOW"IN 1 [SSN] ");
             BYTE randNum = (BYTE)(rand() % 0x50);
 
             BYTE temp_code[] =
@@ -131,7 +131,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
 
         case 2:                                                     // PUSH_POP
         {   
-            norm(RED"IN 2 [SSN]");
+            norm(YELLOW"IN 2 [SSN] ");
             BYTE temp_code[] =
             {
                 0x9C,                                        // pushfq (save flags)
@@ -151,7 +151,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
         }
 
         default:
-        {   norm(RED"DEFAULT [SSN]");
+        {   norm(YELLOW"DEFAULT [SSN] ");
             BYTE temp_code[] =
             {
                 0xB8, 0x00, 0x00, 0x00, 0x00                 // mov eax, SSN
@@ -179,7 +179,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
     {  
         case 0:                                                     // xor and mov
         {
-            norm(RED"in 0 [move]");
+            norm(YELLOW"in 0 [move] ");
             BYTE tempcode[] = 
             {
                 0x4D, 0x31, 0xD2,                   // xor r10, r10
@@ -192,7 +192,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
 
         case 1:                                                     // and then move
         {
-            norm(RED"in 1 [move]");
+            norm(YELLOW"in 1 [move] ");
 
             BYTE tempcode[] = 
             {
@@ -209,7 +209,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
 
         case 2:                                                     // push move pop
         {   
-            norm(RED"in 2 [move]");                                                                             
+            norm(YELLOW"in 2 [move] ");                                                                             
             BYTE tempcode[] = 
             {
                 0x9c,                                       // pushf
@@ -226,7 +226,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
 
         case 3:                                                     // push xor xchg pop
         {
-            norm(RED"in 3 [move]");
+            norm(YELLOW"in 3 [move] ");
             BYTE tempcode[] = 
             {
                 0x9c,                           // pushf
@@ -242,7 +242,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
         }
 
         default:                                                                             
-        {   norm(RED"in DEFAULT [MOV]");                                                                             
+        {   norm(YELLOW"in DEFAULT [MOV] ");                                                                             
 
             BYTE mov_r10_rcx[] =
             {
@@ -271,7 +271,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
     {
         case 0:                                                     // push and xchg
         {   
-            norm(RED"in 0 [jmp]\n");
+            norm(YELLOW"in 0 [jmp] \n");
             BYTE jmp_code[] =
             {
                 0x50,                                                           // push rax
@@ -289,7 +289,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
 
         case 1:                                                     // Push + ret technique
         {
-            norm(RED"in 1 [jmp]\n");
+            norm(YELLOW"in 1 [jmp] \n");
             BYTE jmp_code[] =
             {
                 0x50,                                                           // push rax
@@ -307,7 +307,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
         
         case 2:                                                     // Using Upper and Lower bits
         {
-            norm(RED"in 2 [jmp]\n");
+            norm(YELLOW"in 2 [jmp] \n");
             BYTE jmp_code[] =
             {
                 0x9C,                               // pushf
@@ -329,7 +329,7 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
         }
 
         default:                                                                             
-        {   norm(RED"in DEFAULT [JMP]");                                                                             
+        {   norm(YELLOW"in DEFAULT [JMP] ");                                                                             
 
             BYTE jmp_code[] =
             {
@@ -369,8 +369,6 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
     //     std::cout << RESET"\n";
     // #endif
 
-
-    warn("ENDING FUNCTION");
     return syscall_code;
 }
 
@@ -389,7 +387,7 @@ void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
         void* vpfunction = FindExportAddress(hNtdll, sEntry[j].function_name);
         if(!vpfunction)
         {
-            fuk("Couldn't find the function");
+            fuk("Couldn't find the function\n");
             return (void*)(~0ull);
         }
 
@@ -398,32 +396,32 @@ void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
         BYTE* pBytes = reinterpret_cast<BYTE*>(vpfunction);
         if(pBytes[0] == 0x4C && pBytes[1] == 0x8B && pBytes[2] == 0xD1)
         {
-            ok("Function ", sEntry[j].function_name," is Unhooked");
+            ok("Function ", sEntry[j].function_name," is Unhooked\n");
             for(int i = 0; i < 32; ++i)
             {
                 if(sEntry[j].SSN != 0 && sEntry[j].pCleanSyscall != nullptr) break;
                 if(!sEntry[j].SSN && i + 4 < 32 && pBytes[i] == 0xB8)
                 {
                     sEntry[j].SSN = *(DWORD*)(pBytes + i + 1);
-                    norm("SSN:",CYAN" 0x", std::hex, sEntry[j].SSN); 
+                    //norm("SSN:",CYAN" 0x", std::hex, sEntry[j].SSN, "\n"); 
                 }
 
                 if(!sEntry[j].pCleanSyscall && i + 1 < 32 && (pBytes[i] == 0x0F || pBytes[i+1] == 0x05))
                 {
                     sEntry[j].pCleanSyscall = pBytes + i;
-                    norm("Address of the Syscall: ", CYAN"0x", std::hex, reinterpret_cast<void*>(sEntry[j].pCleanSyscall));
+                    //norm("Address of the Syscall: ", CYAN"0x", std::hex, reinterpret_cast<void*>(sEntry[j].pCleanSyscall), "\n");
                 }
             }
 
             if(sEntry[j].SSN == 0 || sEntry[j].pCleanSyscall == nullptr)
             {
-                fuk("Couldn't find either the SSN or SYSCALL");
+                fuk("Couldn't find either the SSN or SYSCALL\n");
                 return (void*)(~0ull);
             }
         }
         else
         {
-            fuk("Function ", sEntry[j].function_name, " might be hooked");
+            fuk("Function ", sEntry[j].function_name, " might be hooked\n");
             return (void*)(~0ull);
         }
 
@@ -453,7 +451,7 @@ void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
         fuk("Failed to set RX permissions for syscall stubs.");
         return (void*)(~0ull);
     } 
-    ok("Memory is executable");
+    ok("Memory is executable\n");
 
     return (void*)(1ull);
 }
@@ -510,36 +508,36 @@ int main()
     hNtdll = LoadLibraryW(L"ntdll.dll");
     if(!hNtdll)
     {
-        fuk("cant load ntdll"); 
+        fuk("cant load ntdll\n"); 
         return 1;
-    } ok("loaded ntdll");
+    }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     pSyscallPool = (BYTE*)VirtualAlloc(nullptr, MAX_SYSCALLS * 0x16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     
     size_t numSyscalls = 0;
-    // syscallEntries[numSyscalls++] = {"NtCreateFile", 0, nullptr, nullptr};
     syscallEntries[numSyscalls++] = {"NtWriteFile", 0, nullptr, nullptr};
+    syscallEntries[numSyscalls++] = {"NtCreateFile", 0, nullptr, nullptr};
     // syscallEntries[numSyscalls++] = {"NtWriteVirtualMemory", 0, nullptr, nullptr};
     
     AddStubToPool(syscallEntries, numSyscalls);
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    norm("==============================================");
-    // for(int i = 0; i < numSyscalls; ++i)
-    // {
-    //     norm("Function Name: ", GREEN"", syscallEntries[i].function_name);
-    //     norm("SSN: 0x", std::hex, CYAN"",syscallEntries[i].SSN);
-    //     norm("Stub Address: 0x", std::hex, CYAN"", syscallEntries[i].pStubAddress);
-    //     norm("Clean Syscall Address: 0x", std::hex, CYAN"", (void*)syscallEntries[i].pCleanSyscall);
-    //     norm("------------------------");
-    // }
+    norm("==============================================\n");
+    for(int i = 0; i < numSyscalls; ++i)
+    {
+        norm("Function Name: ", GREEN"", syscallEntries[i].function_name);
+        norm("\nSSN: 0x", std::hex, CYAN"",syscallEntries[i].SSN);
+        norm("\nStub Address: 0x", std::hex, CYAN"", syscallEntries[i].pStubAddress);
+        norm("\nClean Syscall Address: 0x", std::hex, CYAN"", (void*)syscallEntries[i].pCleanSyscall);
+        norm("\n------------------------\n");
+    }
 
     #if DEBUG
         norm("\nSyscall Pool Contents:");
-        for(int i = 0; i < SIZE_OF_SYSCALL_CODE; ++i) // Assuming max size of syscall_code is 32 bytes
+        for(int i = 0; i < SIZE_OF_SYSCALL_CODE * 2; ++i) // Assuming max size of syscall_code is 32 bytes
         {
             if(i % 16 == 0) std::cout << YELLOW"\n" << std::hex << std::setw(4) << std::setfill('0') << i << CYAN": ";
             std::cout << std::hex << std::setw(2) << std::setfill('0') << CYAN"" << std::setw(2) << std::setfill('0') << (int)pSyscallPool[i] << " ";
@@ -548,7 +546,7 @@ int main()
     #endif
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-    norm(YELLOW"==============================================");
+    norm(YELLOW"==============================================\n");
 
     char buffer[] = "!!!!Hello from NtWriteFile syscall!!!\n";
     ULONG length = sizeof(buffer) - 1;
@@ -557,70 +555,70 @@ int main()
 
     if(status == (void*)(~0ull))
     {
-        fuk("SysFunction failed");
+        fuk("SysFunction failed\n");
         return 1;
     }
 
-    if((NTSTATUS)uintptr_t(status) == 0) ok("NtWriteFile call successful!");
+    if((NTSTATUS)uintptr_t(status) == 0) ok("NtWriteFile call successful!\n");
     else
     {
-        fuk("NtWriteFile call failed!");
+        fuk("NtWriteFile call failed!\n");
         return 1;
         //std::cout << "Status: 0x" << std::hex << status << std::endl;
     }
 
-    norm(YELLOW"==============================================");
+    norm(YELLOW"\n==============================================\n");
 // // //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // HANDLE fileHandle = nullptr;
-    // UNICODE_STRING fileName;
-    // OBJECT_ATTRIBUTES objAttr;
+    HANDLE fileHandle = nullptr;
+    UNICODE_STRING fileName;
+    OBJECT_ATTRIBUTES objAttr;
 
-    // // Create full path with windows prefix
-    // WCHAR filePath[MAX_PATH] = L"\\??\\";
-    // WCHAR currentDir[MAX_PATH];
-    // GetCurrentDirectoryW(MAX_PATH, currentDir);
-    // wcscat_s(filePath, MAX_PATH, currentDir);
-    // wcscat_s(filePath, MAX_PATH, L"\\testfile.txt");
+    // Create full path with windows prefix
+    WCHAR filePath[MAX_PATH] = L"\\??\\";
+    WCHAR currentDir[MAX_PATH];
+    GetCurrentDirectoryW(MAX_PATH, currentDir);
+    wcscat_s(filePath, MAX_PATH, currentDir);
+    wcscat_s(filePath, MAX_PATH, L"\\testfile.txt");
     
-    // fileName.Buffer = filePath;
-    // fileName.Length = wcslen(filePath) * sizeof(WCHAR);
-    // fileName.MaximumLength = fileName.Length + sizeof(WCHAR);
+    fileName.Buffer = filePath;
+    fileName.Length = wcslen(filePath) * sizeof(WCHAR);
+    fileName.MaximumLength = fileName.Length + sizeof(WCHAR);
 
-    // InitializeObjectAttributes(&objAttr, &fileName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    InitializeObjectAttributes(&objAttr, &fileName, OBJ_CASE_INSENSITIVE, NULL, NULL);
 
 
-    // void* status1 = SysFunction("NtCreateFile",
-    //     &fileHandle, 
-    //     FILE_GENERIC_WRITE,
-    //     &objAttr,
-    //     &ioStatusBlock,
-    //     NULL,
-    //     FILE_ATTRIBUTE_NORMAL,
-    //     FILE_SHARE_READ,
-    //     FILE_OVERWRITE_IF,
-    //     FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
-    //     NULL,
-    //     0
-    // );
+    void* status1 = SysFunction("NtCreateFile",
+        &fileHandle, 
+        FILE_GENERIC_WRITE,
+        &objAttr,
+        &ioStatusBlock,
+        NULL,
+        FILE_ATTRIBUTE_NORMAL,
+        FILE_SHARE_READ,
+        FILE_OVERWRITE_IF,
+        FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
+        NULL,
+        0
+    );
 
-    // if(status == (void*)(~0ull))
-    // {
-    //     fuk("SysFunction failed");
-    //     return 1;
-    // }
+    if(status == (void*)(~0ull))
+    {
+        fuk("SysFunction failed\n");
+        return 1;
+    }
 
-    // if((NTSTATUS)(uintptr_t(status1)) != 0)
-    // {
-    //     fuk("Failed to create test file!\nStatus: ", std::hex, "0x", (NTSTATUS)(uintptr_t(status1)), "\n");
-    //     return 1;
-    // }
-    // ok("File created successfully");
+    if((NTSTATUS)(uintptr_t(status1)) != 0)
+    {
+        fuk("Failed to create test file!\nStatus: ", std::hex, "0x", (NTSTATUS)(uintptr_t(status1)), "\n");
+        return 1;
+    }
+    ok("File created successfully\n");
 
-    norm(YELLOW"==============================================");
+    norm(YELLOW"\n==============================================\n");
 //     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    norm("DONE :)");
+    norm("DONE :)\n");
     #if DEBUG_FILE
         details::close_log_file();
     #endif
