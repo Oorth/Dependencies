@@ -1,10 +1,14 @@
 //cl.exe /EHsc .\test.cpp /link /OUT:test.exe
 /*
 
-    Both functions work individually......
-    but both together dont
+    Works
 
-    something to do with !syscall Stub part
+    size_t numSyscalls = 0;
+    syscallEntries[numSyscalls++] = {"NtWriteFile", 0, 0, nullptr, nullptr};
+    syscallEntries[numSyscalls++] = {"NtCreateFile", 0, 0, nullptr, nullptr};
+    
+    AddStubToPool(syscallEntries, numSyscalls);
+    void* status = SysFunction("NtWriteFile", GetStdHandle(STD_OUTPUT_HANDLE), nullptr, nullptr, nullptr, &ioStatusBlock, buffer, length, nullptr, nullptr);
 
 */
 
@@ -22,6 +26,7 @@
 
 #include <Windows.h>
 #include <winternl.h>
+#include <ctime>
 #include "DbgMacros.h"
 ////////////////////////////////////////////////////////////////////////////////
 
