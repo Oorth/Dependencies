@@ -266,7 +266,8 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
 
     ///////////////////////////////////////////////JMP/////////////////////////////////////////////// 
 
-    switch(rand() % 2)
+    //switch(rand() % 3)
+    switch(2)
     {
         case 0:                                                     // push and xchg
         {   
@@ -304,6 +305,29 @@ BYTE* GenerateSyscallStub(Sys_stb* sEntry)
             break;
         }
         
+        case 2:                                                     // Using Upper and Lower bits
+        {
+            norm(RED"in 2 [jmp]\n");
+            BYTE jmp_code[] =
+            {
+                0x9C,                               // pushf
+                0x48, 0xC7, 0x04, 0x24,             // mov dword [rsp], imm32 (lower half)
+                0x00, 0x00, 0x00, 0x00,
+                0xC7, 0x44, 0x24, 0x04,             // mov dword [rsp+4], imm32 (upper half)
+                0x00, 0x00, 0x00, 0x00,
+                //0x9D,                               // popf
+                0xC3,                               // ret
+            };
+            
+            *(DWORD*)(jmp_code + 5) = (DWORD)((UINT64)sEntry->pCleanSyscall & 0xFFFFFFFF);
+            *(DWORD*)(jmp_code + 13) = (DWORD)((UINT64)sEntry->pCleanSyscall >> 32);
+
+            memcpy(syscall_code + offset, jmp_code, sizeof(jmp_code));
+            offset += sizeof(jmp_code);
+
+            break;
+        }
+
         default:                                                                             
         {   norm(RED"in DEFAULT [JMP]");                                                                             
 
