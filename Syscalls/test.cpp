@@ -1,6 +1,8 @@
 //cl.exe /EHsc .\test.cpp /link /OUT:test.exe
 /*
 
+    !NEED TO ADD A WAY TO GET A CLEAN NTDLL.DLL!
+
     Works
 
     size_t numSyscalls = 0;
@@ -526,7 +528,7 @@ int main()
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    pSyscallPool = (BYTE*)VirtualAlloc(nullptr, MAX_SYSCALLS * 0x16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    pSyscallPool = (BYTE*)VirtualAlloc(nullptr, MAX_SYSCALLS * 0x40, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     
     size_t numSyscalls = 0;
     syscallEntries[numSyscalls++] = {"NtWriteFile", 0, 0, nullptr, nullptr};
@@ -549,10 +551,14 @@ int main()
 
     #if DEBUG
         norm("\nSyscall Pool Contents:");
-        for(int i = 0; i < SIZE_OF_SYSCALL_CODE * numSyscalls; ++i) // Assuming max size of syscall_code is 32 bytes
+        for (int i = 0; i < SIZE_OF_SYSCALL_CODE * numSyscalls; ++i)
         {
-            if(i % 16 == 0) std::cout << YELLOW"\n" << std::hex << std::setw(4) << std::setfill('0') << i << CYAN": ";
-            std::cout << std::hex << std::setw(2) << std::setfill('0') << CYAN"" << std::setw(2) << std::setfill('0') << (int)pSyscallPool[i] << " ";
+            if (i % 16 == 0)
+            {
+                BYTE* addr = pSyscallPool + i;
+                std::cout << YELLOW"\n" << "0x" << std::hex << std::setw(4) << std::setfill('0') << (void*)addr << CYAN": ";
+            }
+            else std::cout << std::hex << std::setw(2) << std::setfill('0') << CYAN"" << std::setw(2) << std::setfill('0') << (int)pSyscallPool[i] << " ";
         }
         std::cout << RESET"\n";
     #endif
