@@ -15,7 +15,7 @@
 */
 
 #define LEAN_AND_MEAN
-#define DEBUG 1
+#define DEBUG 0
 #define DEBUG_FILE 0
 #define DEBUG_VECTOR 0
 
@@ -582,7 +582,7 @@ int main()
     {
         fuk("NtWriteFile call failed!\n");
         return 1;
-        //std::cout << "Status: 0x" << std::hex << status << std::endl;
+        fuk("Status; 0x", std::hex, status,  "\n");
     }
 
     norm(YELLOW"\n==============================================\n");
@@ -620,11 +620,11 @@ int main()
         0
     );
 
-    // if(status == (void*)(~0ull))
-    // {
-    //     fuk("SysFunction failed\n");
-    //     return 1;
-    // }
+    if(status == (void*)(~0ull))
+    {
+        fuk("SysFunction failed\n");
+        return 1;
+    }
 
     if((NTSTATUS)(uintptr_t(status1)) != 0)
     {
