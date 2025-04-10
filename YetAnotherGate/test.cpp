@@ -15,7 +15,7 @@
 */
 
 #define LEAN_AND_MEAN
-#define DEBUG 0
+#define DEBUG 1
 #define DEBUG_FILE 0
 #define DEBUG_VECTOR 0
 
