@@ -512,6 +512,50 @@ void* SysFunction(const char* function_name, ...)
     return retValue;
 }
 
+int GetNtdll()
+{
+    // 1) Open the shared section for ntdll.dll
+    //    The name in the Object Manager is literally "\\KnownDlls\\ntdll.dll"
+    HANDLE hSection = OpenFileMappingW(
+        FILE_MAP_READ,        // we only need read access
+        FALSE,                // do not inherit handle
+        L"\\KnownDlls\\ntdll.dll"
+    );
+    if (!hSection)
+    {
+        std::cerr << "OpenFileMappingW failed: " << std::hex << "0x" << GetLastError() << "\n";
+        system("pause");
+        return 1;
+    }
+
+    // 2) Map the entire section into our address space
+    LPVOID baseAddress = MapViewOfFile(
+        hSection,
+        FILE_MAP_READ,  // read‐only
+        0, 0, 0         // map whole section
+    );
+    CloseHandle(hSection);  // we no longer need the handle
+
+    if (!baseAddress)
+    {
+        std::cerr << "MapViewOfFile failed: " << std::hex << "0x" << GetLastError() << "\n";
+        system("pause");
+        return 1;
+    }
+
+    std::cout << "Clean ntdll.dll mapped at: " << baseAddress << "\n";
+
+    // 3) You can now treat 'baseAddress' as the start of a pristine ntdll.dll image.
+    //    For example, walk its IMAGE_DOS_HEADER/IMAGE_NT_HEADERS, locate .text, etc.
+
+    // … your pattern‐scan / SSN‐extraction logic here …
+
+    // 4) When done, unmap it
+    UnmapViewOfFile(baseAddress);
+    system("pause");
+    return 0;
+}
+
 int main()
 {
     srand(static_cast<unsigned>(time(nullptr)));
@@ -519,126 +563,128 @@ int main()
     DWORD dSSN = 0;
     IO_STATUS_BLOCK ioStatusBlock = {};
 
-    hNtdll = LoadLibraryW(L"ntdll.dll");
-    if(!hNtdll)
-    {
-        fuk("cant load ntdll\n"); 
-        return 1;
-    }
+    GetNtdll();
 
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+//     hNtdll = LoadLibraryW(L"ntdll.dll");
+//     if(!hNtdll)
+//     {
+//         fuk("cant load ntdll\n"); 
+//         return 1;
+//     }
 
-    pSyscallPool = (BYTE*)VirtualAlloc(nullptr, MAX_SYSCALLS * 0x40, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+//     ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//     pSyscallPool = (BYTE*)VirtualAlloc(nullptr, MAX_SYSCALLS * 0x40, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     
-    size_t numSyscalls = 0;
-    syscallEntries[numSyscalls++] = {"NtWriteFile", 0, 0, nullptr, nullptr};
-    syscallEntries[numSyscalls++] = {"NtCreateFile", 0, 0, nullptr, nullptr};
-    // syscallEntries[numSyscalls++] = {"NtWriteVirtualMemory", 0, nullptr, nullptr};
+//     size_t numSyscalls = 0;
+//     syscallEntries[numSyscalls++] = {"NtWriteFile", 0, 0, nullptr, nullptr};
+//     syscallEntries[numSyscalls++] = {"NtCreateFile", 0, 0, nullptr, nullptr};
+//     // syscallEntries[numSyscalls++] = {"NtWriteVirtualMemory", 0, nullptr, nullptr};
     
-    AddStubToPool(syscallEntries, numSyscalls);
+//     AddStubToPool(syscallEntries, numSyscalls);
 
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+//     ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    norm("==============================================\n");
-    for(int i = 0; i < numSyscalls; ++i)
-    {
-        norm("Function Name: ", GREEN"", syscallEntries[i].function_name);
-        norm("\nSSN: 0x", std::hex, CYAN"",syscallEntries[i].SSN);
-        norm("\nStub Address: 0x", std::hex, CYAN"", syscallEntries[i].pStubAddress);
-        norm("\nClean Syscall Address: 0x", std::hex, CYAN"", (void*)syscallEntries[i].pCleanSyscall);
-        norm("\n------------------------\n");
-    }
+//     norm("==============================================\n");
+//     for(int i = 0; i < numSyscalls; ++i)
+//     {
+//         norm("Function Name: ", GREEN"", syscallEntries[i].function_name);
+//         norm("\nSSN: 0x", std::hex, CYAN"",syscallEntries[i].SSN);
+//         norm("\nStub Address: 0x", std::hex, CYAN"", syscallEntries[i].pStubAddress);
+//         norm("\nClean Syscall Address: 0x", std::hex, CYAN"", (void*)syscallEntries[i].pCleanSyscall);
+//         norm("\n------------------------\n");
+//     }
 
-    #if DEBUG
-        norm("\nSyscall Pool Contents:");
-        for (int i = 0; i < SIZE_OF_SYSCALL_CODE * numSyscalls; ++i)
-        {
-            if (i % 16 == 0)
-            {
-                BYTE* addr = pSyscallPool + i;
-                std::cout << YELLOW"\n" << "0x" << std::hex << std::setw(4) << std::setfill('0') << (void*)addr << CYAN": ";
-            }
-            else std::cout << std::hex << std::setw(2) << std::setfill('0') << CYAN"" << std::setw(2) << std::setfill('0') << (int)pSyscallPool[i] << " ";
-        }
-        std::cout << RESET"\n";
-    #endif
+//     #if DEBUG
+//         norm("\nSyscall Pool Contents:");
+//         for (int i = 0; i < SIZE_OF_SYSCALL_CODE * numSyscalls; ++i)
+//         {
+//             if (i % 16 == 0)
+//             {
+//                 BYTE* addr = pSyscallPool + i;
+//                 std::cout << YELLOW"\n" << "0x" << std::hex << std::setw(4) << std::setfill('0') << (void*)addr << CYAN": ";
+//             }
+//             else std::cout << std::hex << std::setw(2) << std::setfill('0') << CYAN"" << std::setw(2) << std::setfill('0') << (int)pSyscallPool[i] << " ";
+//         }
+//         std::cout << RESET"\n";
+//     #endif
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////
-    norm(YELLOW"==============================================\n");
+// /////////////////////////////////////////////////////////////////////////////////////////////////////////
+//     norm(YELLOW"==============================================\n");
 
-    char buffer[] = "!!!!Hello from NtWriteFile syscall!!!\n";
-    ULONG length = sizeof(buffer) - 1;
+//     char buffer[] = "!!!!Hello from NtWriteFile syscall!!!\n";
+//     ULONG length = sizeof(buffer) - 1;
 
-    void* status = SysFunction("NtWriteFile", GetStdHandle(STD_OUTPUT_HANDLE), nullptr, nullptr, nullptr, &ioStatusBlock, buffer, length, nullptr, nullptr);
+//     void* status = SysFunction("NtWriteFile", GetStdHandle(STD_OUTPUT_HANDLE), nullptr, nullptr, nullptr, &ioStatusBlock, buffer, length, nullptr, nullptr);
 
-    if(status == (void*)(~0ull))
-    {
-        fuk("SysFunction failed\n");
-        return 1;
-    }
+//     if(status == (void*)(~0ull))
+//     {
+//         fuk("SysFunction failed\n");
+//         return 1;
+//     }
 
-    if((NTSTATUS)uintptr_t(status) == 0) ok("NtWriteFile call successful!");
-    else
-    {
-        fuk("NtWriteFile call failed!\n");
-        return 1;
-        fuk("Status; 0x", std::hex, status,  "\n");
-    }
+//     if((NTSTATUS)uintptr_t(status) == 0) ok("NtWriteFile call successful!");
+//     else
+//     {
+//         fuk("NtWriteFile call failed!\n");
+//         return 1;
+//         fuk("Status; 0x", std::hex, status,  "\n");
+//     }
 
-    norm(YELLOW"\n==============================================\n");
-// // //////////////////////////////////////////////////////////////////////////////////////////////////////////
+//     norm(YELLOW"\n==============================================\n");
+// // // //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    HANDLE fileHandle = nullptr;
-    UNICODE_STRING fileName;
-    OBJECT_ATTRIBUTES objAttr;
+//     HANDLE fileHandle = nullptr;
+//     UNICODE_STRING fileName;
+//     OBJECT_ATTRIBUTES objAttr;
 
-    // Create full path with windows prefix
-    WCHAR filePath[MAX_PATH] = L"\\??\\";
-    WCHAR currentDir[MAX_PATH];
-    GetCurrentDirectoryW(MAX_PATH, currentDir);
-    wcscat_s(filePath, MAX_PATH, currentDir);
-    wcscat_s(filePath, MAX_PATH, L"\\testfile.txt");
+//     // Create full path with windows prefix
+//     WCHAR filePath[MAX_PATH] = L"\\??\\";
+//     WCHAR currentDir[MAX_PATH];
+//     GetCurrentDirectoryW(MAX_PATH, currentDir);
+//     wcscat_s(filePath, MAX_PATH, currentDir);
+//     wcscat_s(filePath, MAX_PATH, L"\\testfile.txt");
     
-    fileName.Buffer = filePath;
-    fileName.Length = wcslen(filePath) * sizeof(WCHAR);
-    fileName.MaximumLength = fileName.Length + sizeof(WCHAR);
+//     fileName.Buffer = filePath;
+//     fileName.Length = wcslen(filePath) * sizeof(WCHAR);
+//     fileName.MaximumLength = fileName.Length + sizeof(WCHAR);
 
-    InitializeObjectAttributes(&objAttr, &fileName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+//     InitializeObjectAttributes(&objAttr, &fileName, OBJ_CASE_INSENSITIVE, NULL, NULL);
 
 
-    void* status1 = SysFunction("NtCreateFile",
-        &fileHandle, 
-        FILE_GENERIC_WRITE,
-        &objAttr,
-        &ioStatusBlock,
-        NULL,
-        FILE_ATTRIBUTE_NORMAL,
-        FILE_SHARE_READ,
-        FILE_OVERWRITE_IF,
-        FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
-        NULL,
-        0
-    );
+//     void* status1 = SysFunction("NtCreateFile",
+//         &fileHandle, 
+//         FILE_GENERIC_WRITE,
+//         &objAttr,
+//         &ioStatusBlock,
+//         NULL,
+//         FILE_ATTRIBUTE_NORMAL,
+//         FILE_SHARE_READ,
+//         FILE_OVERWRITE_IF,
+//         FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
+//         NULL,
+//         0
+//     );
 
-    if(status == (void*)(~0ull))
-    {
-        fuk("SysFunction failed\n");
-        return 1;
-    }
+//     if(status == (void*)(~0ull))
+//     {
+//         fuk("SysFunction failed\n");
+//         return 1;
+//     }
 
-    if((NTSTATUS)(uintptr_t(status1)) != 0)
-    {
-        fuk("Failed to create test file! Status: ", std::hex, "0x", (NTSTATUS)(uintptr_t(status1)));
-        return 1;
-    }
-    ok("File created successfully");
+//     if((NTSTATUS)(uintptr_t(status1)) != 0)
+//     {
+//         fuk("Failed to create test file! Status: ", std::hex, "0x", (NTSTATUS)(uintptr_t(status1)));
+//         return 1;
+//     }
+//     ok("File created successfully");
 
-    norm(YELLOW"\n==============================================\n");
-//     //////////////////////////////////////////////////////////////////////////////////////////////////////////
+//     norm(YELLOW"\n==============================================\n");
+// //     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    norm("DONE :)\n");
-    #if DEBUG_FILE
-        details::close_log_file();
-    #endif
+//     norm("DONE :)\n");
+//     #if DEBUG_FILE
+//         details::close_log_file();
+//     #endif
     return 0;
 }
