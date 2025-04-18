@@ -33,7 +33,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 HMODULE hNtdll = nullptr;
-typedef void* (__stdcall *GenericSyscallType)(...);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -49,6 +48,13 @@ struct Sys_stb
 BYTE* pSyscallPool = nullptr;
 Sys_stb syscallEntries[MAX_SYSCALLS];
 size_t stubCount = 0, stubOffset = 0;
+
+////////////////////////////////////////////////////////////////////////////////
+
+using NtOpenSection_t = NTSTATUS (NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES);
+using NtMapViewOfSection_t = NTSTATUS (NTAPI*)(HANDLE, HANDLE, PVOID*, ULONG_PTR, SIZE_T, PLARGE_INTEGER, PSIZE_T, DWORD, ULONG, ULONG);
+typedef void* (__stdcall *GenericSyscallType)(...);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void* FindExportAddress(HMODULE hModule, const char* funcName)
@@ -512,31 +518,53 @@ void* SysFunction(const char* function_name, ...)
     return retValue;
 }
 
+void InitUnicodeString(UNICODE_STRING& u, const wchar_t* s)
+{
+    size_t len = wcslen(s) * sizeof(wchar_t);
+    u.Length        = (USHORT)len;
+    u.MaximumLength = (USHORT)(len + sizeof(wchar_t));
+    u.Buffer        = const_cast<wchar_t*>(s);
+}
+
 int GetNtdll()
 {
-    HANDLE hSection = OpenFileMappingW(FILE_MAP_READ, FALSE, L"\\KnownDlls\\ntdll.dll"
-    );
-    if (!hSection)
+    typedef enum _SECTION_INHERIT {ViewShare = 1,ViewUnmap = 2} SECTION_INHERIT;
+
+    hNtdll = GetModuleHandleW(L"ntdll.dll");
+
+    auto NtOpenSection = (NtOpenSection_t)FindExportAddress(hNtdll, "NtOpenSection");
+    auto NtMapViewOfSection = (NtMapViewOfSection_t)FindExportAddress(hNtdll, "NtMapViewOfSection");
+
+    UNICODE_STRING name;
+    InitUnicodeString(name, L"\\KnownDlls\\ntdll.dll");
+    
+    OBJECT_ATTRIBUTES oa;
+    InitializeObjectAttributes(&oa, &name, OBJ_CASE_INSENSITIVE, NULL, NULL);
+
+    //Open the section object
+    HANDLE hSection = NULL;
+    NTSTATUS status = NtOpenSection(&hSection, SECTION_MAP_READ, &oa);
+    if (!NT_SUCCESS(status))
     {
-        std::cerr << "OpenFileMappingW failed: " << std::hex << "0x" << GetLastError() << "\n";
-        system("pause");
+        printf("NtOpenSection failed: 0x%X\n", status);
         return 1;
     }
 
-    LPVOID baseAddress = MapViewOfFile(hSection, FILE_MAP_READ, 0, 0, 0);
+    //Map a read‑only view
+    void* baseAddress = NULL;
+    SIZE_T viewSize = 0;
+    status = NtMapViewOfSection(hSection, GetCurrentProcess(), &baseAddress, 0, 0, NULL, &viewSize, (SECTION_INHERIT)2, 0, PAGE_READONLY);
     CloseHandle(hSection);
-
-    if (!baseAddress)
+    
+    if (!NT_SUCCESS(status))
     {
-        std::cerr << "MapViewOfFile failed: " << std::hex << "0x" << GetLastError() << "\n";
-        system("pause");
+        fuk("NtMapViewOfSection failed: 0x", status);
         return 1;
     }
+    norm("\nClean ntdll.dll mapped at: 0x", std::hex, CYAN"", baseAddress,"\n");
+    hNtdll = reinterpret_cast<HMODULE>(baseAddress);
 
-    std::cout << "Clean ntdll.dll mapped at: " << baseAddress << "\n";
-
-    UnmapViewOfFile(baseAddress);
-    system("pause");
+    //UnmapViewOfFile(baseAddress);            //unmap it, when done
     return 0;
 }
 
@@ -547,14 +575,16 @@ int main()
     DWORD dSSN = 0;
     IO_STATUS_BLOCK ioStatusBlock = {};
 
-    //GetNtdll();
-
-    hNtdll = LoadLibraryW(L"ntdll.dll");
-    if(!hNtdll)
+    if(GetNtdll())
     {
-        fuk("cant load ntdll\n"); 
+        fuk("DIDNT WORK");
         return 1;
     }
+    // else
+    // {
+    //     ok("NOICE");
+    //     return 0;
+    // }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
