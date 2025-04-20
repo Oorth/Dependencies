@@ -66,6 +66,11 @@ If you messup somewhere :)
 I ASSUME WE HAVE A CLEAN UNHOOKED NTDLL.DLL, WORKING ON WAYS TO GET THE UNHOOKED NTDLL SILENTLY SOMEHOW IN AN AV/EDR INFESTED ENVIRONMENTS.
 ideas are welcomed..
 
+Currently using methods to get clean unhooked ntdll.dll ->
+    1) KnownDlls
+    2) Blind Side [Need to code]
+    3) VEH [Exploring]
+
 ## The End
 So people have fun stay safe, If you have further ideas go on I am all ears.
 
