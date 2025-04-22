@@ -56,6 +56,7 @@ struct _LIBS
 {
     HMODULE hNtdll;
     HMODULE hKERNEL32;
+    HMODULE hUsr32;
 }sLibs;
 
 typedef struct _MY_FUNCTIONS
@@ -99,11 +100,11 @@ void GetFunctions()
     #else
         PEB* pPEB = (PEB*) __readgsqword(0x60);   
     #endif
-    norm(CYAN"PEB -> 0x", std::hex, (void*)pPEB);
+    norm("PEB ->", CYAN" 0x", std::hex, (void*)pPEB);
     
 
     PEB_LDR_DATA* pLdr = pPEB->Ldr;
-    norm(CYAN"\nLDR -> 0x", std::hex, (void*)pLdr);
+    norm("\nLDR ->", CYAN" 0x", std::hex, (void*)pLdr);
     
     //=======================================================================
 
@@ -121,6 +122,7 @@ void GetFunctions()
         {
             if (_wcsicmp(entry->BaseDllName.Buffer, obf_Ker_32) == 0) sLibs.hKERNEL32 = (HMODULE)entry->DllBase;
             else if (_wcsicmp(entry->BaseDllName.Buffer, obf_Ntd_32) == 0) sLibs.hNtdll = (HMODULE)entry->DllBase;
+            else if (_wcsicmp(entry->BaseDllName.Buffer, obf_Usr_32) == 0) sLibs.hUsr32 = (HMODULE)entry->DllBase;
         }
         current = current->Flink;
     }
@@ -130,9 +132,10 @@ void GetFunctions()
     for (size_t i = 0; i < wcslen(obf_Ntd_32); i++) obf_Ntd_32[i] = 0;
 
     //=======================================================================
-
-    norm("\nFinal Kernel32 Base: 0x", std::hex, sLibs.hKERNEL32);
-    norm("\nFinal NTDLL Base: 0x", std::hex, sLibs.hNtdll);
+    norm(YELLOW"\n======================================================");
+    norm("\nKernel32 Base: ", CYAN"0x", std::hex, sLibs.hKERNEL32);
+    norm("\nNTDLL Base: ", CYAN"0x", std::hex, sLibs.hNtdll);
+    norm("\nUsr32 Base: ", CYAN"0x", std::hex, sLibs.hUsr32);
 }
 
 
@@ -766,7 +769,7 @@ int main()
 //         details::close_log_file();
 //     #endif
 
-    ok("BYE");
+    norm("\n");ok("BYE");
     return 0;
 }
 
