@@ -95,6 +95,29 @@ typedef struct _IMAGE_NT_HEADERS32 *PIMAGE_NT_HEADERS32;
     }
 #endif
 
+#define IMAGE_DOS_SIGNATURE                 0x5A4D      // MZ
+#define IMAGE_OS2_SIGNATURE                 0x454E      // NE
+#define IMAGE_OS2_SIGNATURE_LE              0x454C      // LE
+#define IMAGE_VXD_SIGNATURE                 0x454C      // LE
+#define IMAGE_NT_SIGNATURE                  0x00004550  // PE00
+
+#define IMAGE_DIRECTORY_ENTRY_EXPORT          0   // Export Directory
+#define IMAGE_DIRECTORY_ENTRY_IMPORT          1   // Import Directory
+#define IMAGE_DIRECTORY_ENTRY_RESOURCE        2   // Resource Directory
+#define IMAGE_DIRECTORY_ENTRY_EXCEPTION       3   // Exception Directory
+#define IMAGE_DIRECTORY_ENTRY_SECURITY        4   // Security Directory
+#define IMAGE_DIRECTORY_ENTRY_BASERELOC       5   // Base Relocation Table
+#define IMAGE_DIRECTORY_ENTRY_DEBUG           6   // Debug Directory
+//      IMAGE_DIRECTORY_ENTRY_COPYRIGHT       7   // (X86 usage)
+#define IMAGE_DIRECTORY_ENTRY_ARCHITECTURE    7   // Architecture Specific Data
+#define IMAGE_DIRECTORY_ENTRY_GLOBALPTR       8   // RVA of GP
+#define IMAGE_DIRECTORY_ENTRY_TLS             9   // TLS Directory
+#define IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG    10   // Load Configuration Directory
+#define IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT   11   // Bound Import Directory in headers
+#define IMAGE_DIRECTORY_ENTRY_IAT            12   // Import Address Table
+#define IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT   13   // Delay Load Import Descriptors
+#define IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR 14   // COM Runtime descriptor
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Basic integer types and their pointers
@@ -345,22 +368,29 @@ typedef struct _IO_STATUS_BLOCK
         ULONG_PTR Information;
 } IO_STATUS_BLOCK, *PIO_STATUS_BLOCK;
 
-typedef struct _IMAGE_DOS_HEADER
-{      // DOS .EXE header
-    WORD   e_magic;                     // Magic number
-    WORD   e_cblp;                      // Bytes on last page of file
-    WORD   e_cp;                        // Pages in file
-    WORD   e_crlc;                      // Relocations
-    WORD   e_cparhdr;                   // Size of header in paragraphs
-    WORD   e_minalloc;                  // Minimum extra paragraphs needed
-    WORD   e_maxalloc;                  // Maximum extra paragraphs needed
-    WORD   e_ss;                        // Initial (relative) SS value
-    WORD   e_sp;                        // Initial SP value
-    WORD   e_csum;                      // Checksum
-    WORD   e_ip;                        // Initial IP value
-    WORD   e_res2[10];                  // Reserved words
-    LONG   e_lfanew;                    // File address of new exe header
+#pragma pack(push,1)
+typedef struct _IMAGE_DOS_HEADER {      
+    WORD e_magic;       // 0x00  ‘MZ’
+    WORD e_cblp;        // 0x02  
+    WORD e_cp;          // 0x04
+    WORD e_crlc;        // 0x06
+    WORD e_cparhdr;     // 0x08
+    WORD e_minalloc;    // 0x0A
+    WORD e_maxalloc;    // 0x0C
+    WORD e_ss;          // 0x0E
+    WORD e_sp;          // 0x10
+    WORD e_csum;        // 0x12
+    WORD e_ip;          // 0x14
+    WORD e_cs;          // 0x16
+    WORD e_lfarlc;      // 0x18
+    WORD e_ovno;        // 0x1A
+    WORD e_res[4];      // 0x1C
+    WORD e_oemid;       // 0x24
+    WORD e_oeminfo;     // 0x26
+    WORD e_res2[10];    // 0x28
+    LONG e_lfanew;      // 0x3C  <-- correct offset
 } IMAGE_DOS_HEADER, *PIMAGE_DOS_HEADER;
+#pragma pack(pop)
 
 // #if defined(__cplusplus)
 // #define EXTERN_C extern "C"

