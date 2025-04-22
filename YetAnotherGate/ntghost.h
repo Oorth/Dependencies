@@ -293,10 +293,9 @@ typedef struct _LDR_DATA_TABLE_ENTRY
     LIST_ENTRY InLoadOrderLinks;
     LIST_ENTRY InMemoryOrderLinks;
     LIST_ENTRY InInitializationOrderLinks;
-    PVOID      DllBase;
+    PVOID DllBase;
     UNICODE_STRING FullDllName;
     UNICODE_STRING BaseDllName;
-    // ... you can omit the rest ...
 } LDR_DATA_TABLE_ENTRY, *PLDR_DATA_TABLE_ENTRY;
 
 // Full PEB_LDR_DATA with all three list heads
@@ -308,7 +307,6 @@ typedef struct _PEB_LDR_DATA
     LIST_ENTRY InLoadOrderModuleList;
     LIST_ENTRY InMemoryOrderModuleList;
     LIST_ENTRY InInitializationOrderModuleList;
-    // ... omit the rest ...
 } PEB_LDR_DATA, *PPEB_LDR_DATA;
 
 // Minimal PEB just up to the Ldr pointer
