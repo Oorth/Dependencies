@@ -48,9 +48,9 @@ void* FindExportAddress(HMODULE, const char*);
 //===============================================================================
 
 typedef BOOL (WINAPI *pVirtualProtect)(LPVOID, SIZE_T, DWORD, PDWORD);
-// typedef LPVOID (WINAPI *pVirtualAlloc)(LPVOID, SIZE_T, DWORD, DWORD);
+typedef LPVOID (WINAPI *pVirtualAlloc)(LPVOID, SIZE_T, DWORD, DWORD);
+typedef DWORD (WINAPI *pGetLastError)(VOID);
 // typedef DWORD (WINAPI *pGetCurrentDirectoryW)(DWORD, LPWSTR);
-// typedef DWORD (WINAPI *pGetLastError)(VOID);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -74,6 +74,8 @@ struct _LIBS
 typedef struct _MY_FUNCTIONS
 {
     pVirtualProtect MyVirtualProtect;
+    pVirtualAlloc MyVirtualAlloc;
+    pGetLastError MyGetLastError;
 }_MY_FUNCTIONS;
 _MY_FUNCTIONS fn;
 
@@ -85,6 +87,8 @@ HMODULE hNtdll = nullptr;
 
 int GetFunctions()
 {
+    norm(GREEN"\n///////////////////GetFunctions()///////////////////");
+
     HMODULE kernel32Base = NULL;
     HMODULE ntdllBase = NULL;
 
@@ -93,14 +97,14 @@ int GetFunctions()
     #else
         PEB* pPEB = (PEB*) __readgsqword(0x60);   
     #endif
-    norm("PEB ->", CYAN" 0x", std::hex, (void*)pPEB);
+    norm("\nPEB ->", CYAN" 0x", std::hex, (void*)pPEB);
     
 
     PEB_LDR_DATA* pLdr = pPEB->Ldr;
-    norm("\nLDR ->", CYAN" 0x", std::hex, (void*)pLdr);
+    //norm("\nLDR ->", CYAN" 0x", std::hex, (void*)pLdr);
     
     //=======================================================================
-    norm(YELLOW"\n======================================================");
+    //norm(YELLOW"\n======================================================");
     for (int i = 0; obf_Ntd_32[i] != '\0'; i++) obf_Ntd_32[i] ^= HEX_K;
     for (int i = 0; obf_Ker_32[i] != '\0'; i++) obf_Ker_32[i] ^= HEX_K;
     for (int i = 0; obf_KerB[i] != '\0'; i++) obf_KerB[i] ^= HEX_K;
@@ -118,12 +122,12 @@ int GetFunctions()
         {
             int len = entry->BaseDllName.Length / sizeof(WCHAR);
             std::wstring name(entry->BaseDllName.Buffer, len);
-            wprintf(L"\nModule: %.*ls -> " CYAN"0x%p" RESET"", len, entry->BaseDllName.Buffer, entry->DllBase);
+            // wprintf(L"\nModule: %.*ls -> " CYAN"0x%p" RESET"", len, entry->BaseDllName.Buffer, entry->DllBase);
 
             size_t pos = name.find_last_of(L"\\/");
             std::wstring fileName = (pos == std::wstring::npos) ? name : name.substr(pos + 1);
 
-            wprintf(L"\n[DEBUG] Scanned Module: %ls", fileName.c_str());
+            // wprintf(L"\n[DEBUG] Scanned Module: %ls", fileName.c_str());
 
             if (_wcsicmp(fileName.c_str(), obf_Ker_32) == 0) sLibs.hKERNEL32 = (HMODULE)entry->DllBase;
             else if (_wcsicmp(fileName.c_str(), obf_KerB) == 0) sLibs.hKERNELBASE = (HMODULE)entry->DllBase;
@@ -138,7 +142,7 @@ int GetFunctions()
     for (size_t i = 0; i < wcslen(obf_Usr_32); i++) obf_Usr_32[i] = 0;
 
     //=======================================================================
-    norm(YELLOW"\n======================================================");
+    // norm(YELLOW"\n======================================================");
     printf("\nNTDLL : " CYAN"0x%p" RESET"", sLibs.hNtdll); 
     printf("\nKernel32 : " CYAN"0x%p" RESET"", sLibs.hKERNEL32);
     printf("\nKernelBASE32 : " CYAN"0x%p" RESET"", sLibs.hKERNELBASE);
@@ -150,27 +154,43 @@ int GetFunctions()
         norm("\n");fuk("Problems with Dlls");
         return 0;
     }
-    norm("\nNTDLL DOS Header Magic: ", ((IMAGE_DOS_HEADER*)sLibs.hNtdll)->e_magic == 0x5A4D ? "MZ" : "Invalid", "\n");
-    norm("KERNEL32 DOS Header Magic: ", ((IMAGE_DOS_HEADER*)sLibs.hKERNEL32)->e_magic == 0x5A4D ? "MZ" : "Invalid", "\n");
-    norm("KERNELBASE DOS Header Magic: ", ((IMAGE_DOS_HEADER*)sLibs.hKERNELBASE)->e_magic == 0x5A4D ? "MZ" : "Invalid", "\n");
+    norm("\nNTDLL DOS Header Magic: ", ((IMAGE_DOS_HEADER*)sLibs.hNtdll)->e_magic == 0x5A4D ? GREEN"MZ" : RED"Invalid", "\n");
+    norm("KERNEL32 DOS Header Magic: ", ((IMAGE_DOS_HEADER*)sLibs.hKERNEL32)->e_magic == 0x5A4D ? GREEN"MZ" : RED"Invalid", "\n");
+    norm("KERNELBASE DOS Header Magic: ", ((IMAGE_DOS_HEADER*)sLibs.hKERNELBASE)->e_magic == 0x5A4D ? GREEN"MZ" : RED"Invalid", "\n");
     norm(YELLOW"======================================================");
     
     if (!sLibs.hKERNELBASE)
     {
         fuk("hKERNELBASE is null! You never found it in PEB walk!");
         return 0;
-    }printf("\n[DEBUG] KERNELBASE handle before FindExportAddress: 0x%p", sLibs.hKERNELBASE);
+    }//printf("\n[DEBUG] KERNELBASE handle before FindExportAddress: 0x%p", sLibs.hKERNELBASE);
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    
     fn.MyVirtualProtect = (pVirtualProtect)FindExportAddress(sLibs.hKERNELBASE, "VirtualProtect");
-    if (fn.MyVirtualProtect == nullptr)
+    if(fn.MyVirtualProtect == nullptr)
     {
         fuk("Failed to get VirtualProtect address");
         return 0;
-    }
+    }norm(GREEN"\t[DONE]");
 
-    if(!fn.MyVirtualProtect) fuk("No Virtual protek");
-    ok("Got Virtual Protek");
+    fn.MyVirtualAlloc = (pVirtualAlloc)FindExportAddress(sLibs.hKERNELBASE, "VirtualAlloc");
+    if(fn.MyVirtualAlloc == nullptr)
+    {
+        fuk("Failed to get VirtualAlloc address");
+        return 0;        
+    }norm(GREEN"\t[DONE]");
 
+    fn.MyGetLastError = (pGetLastError)FindExportAddress(sLibs.hKERNELBASE, "GetLastError");
+    if(fn.MyGetLastError == nullptr)
+    {
+        fuk("Failed to get GetLastError address");
+        return 0;        
+    }norm(GREEN"\t[DONE]");
+    
+    norm(GREEN"\n///////////////////GetFunctions()///////////////////\n");
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     return 1;
 }
 
@@ -496,7 +516,7 @@ void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
 
     for(size_t j = 0; j < NumberOfElements; ++j)
     {
-        void* vpfunction = FindExportAddress(hNtdll, sEntry[j].function_name);
+        void* vpfunction = FindExportAddress(sLibs.hNtdll, sEntry[j].function_name);
         if(!vpfunction)
         {
             fuk("Couldn't find the function\n");
@@ -561,7 +581,7 @@ void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
     DWORD oldProtect;
     if (fn.MyVirtualProtect(pSyscallPool, stubOffset, 0x20, &oldProtect))
     {
-        fuk("Failed to set RX permissions for syscall stubs.");
+        fuk("Failed to set RX permissions for syscall stubs. -> ", fn.MyGetLastError());
         return (void*)(~0ull);
     } 
     ok("Memory is executable\n");
@@ -610,13 +630,13 @@ void* SysFunction(const char* function_name, ...)
     return retValue;
 }
 
-// void InitUnicodeString(UNICODE_STRING& u, const wchar_t* s)
-// {
-//     size_t len = wcslen(s) * sizeof(wchar_t);
-//     u.Length        = (USHORT)len;
-//     u.MaximumLength = (USHORT)(len + sizeof(wchar_t));
-//     u.Buffer        = const_cast<wchar_t*>(s);
-// }
+void InitUnicodeString(UNICODE_STRING& u, const wchar_t* s)
+{
+    size_t len = wcslen(s) * sizeof(wchar_t);
+    u.Length        = (USHORT)len;
+    u.MaximumLength = (USHORT)(len + sizeof(wchar_t));
+    u.Buffer        = const_cast<wchar_t*>(s);
+}
 
 int main()
 {
@@ -631,105 +651,105 @@ int main()
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//     pSyscallPool = (BYTE*)((pVirtualAlloc)sGhostFn.pVirtualAlloc)(nullptr, MAX_SYSCALLS * 0x40, 0x00001000 | 0x00002000, 0x40);
+    pSyscallPool = static_cast<BYTE*>(fn.MyVirtualAlloc(nullptr, MAX_SYSCALLS * 0x40, 0x00001000 | 0x00002000, 0x40));
     
-//     size_t numSyscalls = 0;
-//     syscallEntries[numSyscalls++] = {"NtWriteFile", 0, 0, nullptr, nullptr};
-//     syscallEntries[numSyscalls++] = {"NtCreateFile", 0, 0, nullptr, nullptr};
-//     // syscallEntries[numSyscalls++] = {"NtWriteVirtualMemory", 0, nullptr, nullptr};
+    size_t numSyscalls = 0;
+    syscallEntries[numSyscalls++] = {"NtWriteFile", 0, 0, nullptr, nullptr};
+    syscallEntries[numSyscalls++] = {"NtCreateFile", 0, 0, nullptr, nullptr};
+    // syscallEntries[numSyscalls++] = {"NtWriteVirtualMemory", 0, nullptr, nullptr};
     
-//     AddStubToPool(syscallEntries, numSyscalls);
+    AddStubToPool(syscallEntries, numSyscalls);
 
-//     ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//     norm("==============================================\n");
-//     for(int i = 0; i < numSyscalls; ++i)
-//     {
-//         norm("Function Name: ", GREEN"", syscallEntries[i].function_name);
-//         norm("\nSSN: 0x", std::hex, CYAN"",syscallEntries[i].SSN);
-//         norm("\nStub Address: 0x", std::hex, CYAN"", syscallEntries[i].pStubAddress);
-//         norm("\nClean Syscall Address: 0x", std::hex, CYAN"", (void*)syscallEntries[i].pCleanSyscall);
-//         norm("\n------------------------\n");
-//     }
+    norm("\n==============================================\n");
+    for(int i = 0; i < numSyscalls; ++i)
+    {
+        norm("Function Name: ", GREEN"", syscallEntries[i].function_name);
+        norm("\nSSN: 0x", std::hex, CYAN"",syscallEntries[i].SSN);
+        norm("\nStub Address: 0x", std::hex, CYAN"", syscallEntries[i].pStubAddress);
+        norm("\nClean Syscall Address: 0x", std::hex, CYAN"", (void*)syscallEntries[i].pCleanSyscall);
+        norm("\n------------------------\n");
+    }
 
-//     #if DEBUG
-//         norm("\nSyscall Pool Contents:");
-//         for (int i = 0; i < SIZE_OF_SYSCALL_CODE * numSyscalls; ++i)
-//         {
-//             if (i % 16 == 0)
-//             {
-//                 BYTE* addr = pSyscallPool + i;
-//                 std::cout << YELLOW"\n" << "0x" << std::hex << std::setw(4) << std::setfill('0') << (void*)addr << CYAN": ";
-//             }
-//             else std::cout << std::hex << std::setw(2) << std::setfill('0') << CYAN"" << std::setw(2) << std::setfill('0') << (int)pSyscallPool[i] << " ";
-//         }
-//         std::cout << RESET"\n";
-//     #endif
+    #if DEBUG
+        norm("\nSyscall Pool Contents:");
+        for (int i = 0; i < SIZE_OF_SYSCALL_CODE * numSyscalls; ++i)
+        {
+            if (i % 16 == 0)
+            {
+                BYTE* addr = pSyscallPool + i;
+                std::cout << YELLOW"\n" << "0x" << std::hex << std::setw(4) << std::setfill('0') << (void*)addr << CYAN": ";
+            }
+            else std::cout << std::hex << std::setw(2) << std::setfill('0') << CYAN"" << std::setw(2) << std::setfill('0') << (int)pSyscallPool[i] << " ";
+        }
+        std::cout << RESET"\n";
+    #endif
 
-// /////////////////////////////////////////////////////////////////////////////////////////////////////////
-//     norm(YELLOW"==============================================\n");
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+    norm(YELLOW"==============================================\n");
 
-//     char buffer[] = "!!!!Hello from NtWriteFile syscall!!!\n";
-//     ULONG length = sizeof(buffer) - 1;
+    char buffer[] = "!!!!Hello from NtWriteFile syscall!!!\n";
+    ULONG length = sizeof(buffer) - 1;
 
-//     void* status = SysFunction("NtWriteFile", ((DWORD)-11), nullptr, nullptr, nullptr, &ioStatusBlock, buffer, length, nullptr, nullptr);
+    void* status = SysFunction("NtWriteFile", ((DWORD)-11), nullptr, nullptr, nullptr, &ioStatusBlock, buffer, length, nullptr, nullptr);
 
-//     if(status == (void*)(~0ull))
-//     {
-//         fuk("SysFunction failed\n");
-//         return 1;
-//     }
+    if(status == (void*)(~0ull))
+    {
+        fuk("SysFunction failed\n");
+        return 1;
+    }
 
-//     if((NTSTATUS)uintptr_t(status) == 0) ok("NtWriteFile call successful!");
-//     else
-//     {
-//         fuk("NtWriteFile call failed!\n");
-//         return 1;
-//         fuk("Status; 0x", std::hex, status,  "\n");
-//     }
+    if((NTSTATUS)uintptr_t(status) == 0) ok("NtWriteFile call successful!");
+    else
+    {
+        fuk("NtWriteFile call failed!\n");
+        return 1;
+        fuk("Status; 0x", std::hex, status,  "\n");
+    }
 
-//     norm(YELLOW"\n==============================================\n");
-// // // //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    norm(YELLOW"\n==============================================\n");
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//     HANDLE fileHandle = nullptr;
-//     UNICODE_STRING fileName;
-//     OBJECT_ATTRIBUTES objAttr;
+    // HANDLE fileHandle = nullptr;
+    // UNICODE_STRING fileName;
+    // OBJECT_ATTRIBUTES objAttr;
 
-//     // Create full path with windows prefix
-//     WCHAR filePath[260] = L"\\??\\";
-//     WCHAR currentDir[260];
-//     ((pGetCurrentDirectoryW)sGhostFn.pGetCurrentDirectoryW)(260, currentDir);
-//     wcscat_s(filePath, 260, currentDir);
-//     wcscat_s(filePath, 260, L"\\testfile.txt");
+    // // Create full path with windows prefix
+    // WCHAR filePath[260] = L"\\??\\";
+    // WCHAR currentDir[260];
+    // GetCurrentDirectoryW(260, currentDir);
+    // wcscat_s(filePath, 260, currentDir);
+    // wcscat_s(filePath, 260, L"\\testfile.txt");
     
-//     fileName.Buffer = filePath;
-//     fileName.Length = wcslen(filePath) * sizeof(WCHAR);
-//     fileName.MaximumLength = fileName.Length + sizeof(WCHAR);
+    // fileName.Buffer = filePath;
+    // fileName.Length = wcslen(filePath) * sizeof(WCHAR);
+    // fileName.MaximumLength = fileName.Length + sizeof(WCHAR);
 
-//     InitializeObjectAttributes(&objAttr, &fileName, 0x00000040L, NULL, NULL);
+    // InitializeObjectAttributes(&objAttr, &fileName, 0x00000040L, NULL, NULL);
 
-//     void* status1 = SysFunction("NtCreateFile",&fileHandle, FILE_GENERIC_WRITE, &objAttr, &ioStatusBlock, NULL, 0x00000080, 0x00000001, 0x00000005, 0x00000040 | 0x00000020,NULL,0);
+    // void* status1 = SysFunction("NtCreateFile",&fileHandle, FILE_GENERIC_WRITE, &objAttr, &ioStatusBlock, NULL, 0x00000080, 0x00000001, 0x00000005, 0x00000040 | 0x00000020,NULL,0);
 
-//     if(status == (void*)(~0ull))
-//     {
-//         fuk("SysFunction failed\n");
-//         return 1;
-//     }
+    // if(status == (void*)(~0ull))
+    // {
+    //     fuk("SysFunction failed\n");
+    //     return 1;
+    // }
 
-//     if((NTSTATUS)(uintptr_t(status1)) != 0)
-//     {
-//         fuk("Failed to create test file! Status: ", std::hex, "0x", (NTSTATUS)(uintptr_t(status1)));
-//         return 1;
-//     }
-//     ok("File created successfully");
+    // if((NTSTATUS)(uintptr_t(status1)) != 0)
+    // {
+    //     fuk("Failed to create test file! Status: ", std::hex, "0x", (NTSTATUS)(uintptr_t(status1)));
+    //     return 1;
+    // }
+    // ok("File created successfully");
 
-//     norm(YELLOW"\n==============================================\n");
-// //     //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // norm(YELLOW"\n==============================================\n");
+//     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//     norm("DONE :)\n");
-//     #if DEBUG_FILE
-//         details::close_log_file();
-//     #endif
+    norm("DONE :)\n");
+    #if DEBUG_FILE
+        details::close_log_file();
+    #endif
 
     norm("\n");ok("BYE");
     return 0;
@@ -744,8 +764,8 @@ void* FindExportAddress(HMODULE hModule, const char* funcName)
     DWORD peOffset = dos->e_lfanew;
     DWORD peSig = *(DWORD*)(base + peOffset);
     
-    printf("\n[DEBUG] DOS e_lfanew: 0x%X", peOffset);
-    printf("\n[DEBUG] NT Signature: 0x%X", peSig);
+    // printf("\n[DEBUG] DOS e_lfanew: 0x%X", peOffset);
+    // printf("\n[DEBUG] NT Signature: 0x%X", peSig);
 
     base = (BYTE*)hModule;
     dos = (IMAGE_DOS_HEADER*)base;
@@ -757,8 +777,8 @@ void* FindExportAddress(HMODULE hModule, const char* funcName)
     auto& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
     if (dir.VirtualAddress == 0){ fuk("Optional header issue"); return nullptr; }
 
-    printf("\nExportDir VA: 0x%X, Size: 0x%X", dir.VirtualAddress, dir.Size);
-    printf("\nTrying to resolve: %s", funcName);
+    // printf("\nExportDir VA: 0x%X, Size: 0x%X", dir.VirtualAddress, dir.Size);
+    norm("\n");warn("Trying to resolve ",YELLOW"", funcName);
 
     IMAGE_EXPORT_DIRECTORY* exp = (IMAGE_EXPORT_DIRECTORY*)(base + dir.VirtualAddress);
     DWORD* nameRVAs = (DWORD*)(base + exp->AddressOfNames);
