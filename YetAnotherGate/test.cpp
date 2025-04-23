@@ -15,7 +15,7 @@
 */
 
 #define LEAN_AND_MEAN
-#define DEBUG 1
+#define DEBUG 0
 #define DEBUG_FILE 0
 #define DEBUG_VECTOR 0
 
@@ -23,10 +23,11 @@
 #define SIZE_OF_SYSCALL_CODE 64
 
 //#include <Windows.h>
-//h#include <winternl.h>
+//#include <winternl.h>
 #include "ntghost.h"
 #include "DbgMacros.h"
 #include <ctime>
+#include <string>
 #if DEBUG | DEBUG_FILE
     #include <iomanip>
 #endif
@@ -42,15 +43,16 @@ wchar_t obf_Usr_32[] = { X_C(L'u'), X_C(L's'), X_C(L'e'), X_C(L'r'), X_C(L'3'), 
 
 ////////////////////////////////////////////////////////////////////////////////
 
-typedef void* (__stdcall *GenericSyscallType)(...);
+typedef void* (__stdcall* GenericSyscallType)(...);
 void* FindExportAddress(HMODULE, const char*);
 
 //===============================================================================
 
-typedef BOOL (WINAPI *pVirtualProtect)(LPVOID, SIZE_T, DWORD, PDWORD);
-typedef LPVOID (WINAPI *pVirtualAlloc)(LPVOID, SIZE_T, DWORD, DWORD);
-typedef DWORD (WINAPI *pGetLastError)(VOID);
-// typedef DWORD (WINAPI *pGetCurrentDirectoryW)(DWORD, LPWSTR);
+typedef BOOL (WINAPI* pVirtualProtect)(LPVOID, SIZE_T, DWORD, PDWORD);
+typedef LPVOID (WINAPI* pVirtualAlloc)(LPVOID, SIZE_T, DWORD, DWORD);
+typedef DWORD (WINAPI* pGetLastError)(VOID);
+typedef HANDLE (WINAPI* pGetStdHandle)(_In_ DWORD);
+// typedef DWORD (WINAPI* pGetCurrentDirectoryW)(DWORD, LPWSTR);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -76,6 +78,7 @@ typedef struct _MY_FUNCTIONS
     pVirtualProtect MyVirtualProtect;
     pVirtualAlloc MyVirtualAlloc;
     pGetLastError MyGetLastError;
+    pGetStdHandle MyGetStdHandle;
 }_MY_FUNCTIONS;
 _MY_FUNCTIONS fn;
 
@@ -143,9 +146,11 @@ int GetFunctions()
 
     //=======================================================================
     // norm(YELLOW"\n======================================================");
-    printf("\nNTDLL : " CYAN"0x%p" RESET"", sLibs.hNtdll); 
-    printf("\nKernel32 : " CYAN"0x%p" RESET"", sLibs.hKERNEL32);
-    printf("\nKernelBASE32 : " CYAN"0x%p" RESET"", sLibs.hKERNELBASE);
+    #if DEBUG
+        printf("\nNTDLL : " CYAN"0x%p" RESET"", sLibs.hNtdll); 
+        printf("\nKernel32 : " CYAN"0x%p" RESET"", sLibs.hKERNEL32);
+        printf("\nKernelBASE32 : " CYAN"0x%p" RESET"", sLibs.hKERNELBASE);
+    #endif
     norm(YELLOW"\n======================================================");
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -171,26 +176,29 @@ int GetFunctions()
     fn.MyVirtualProtect = (pVirtualProtect)FindExportAddress(sLibs.hKERNELBASE, "VirtualProtect");
     if(fn.MyVirtualProtect == nullptr)
     {
-        fuk("Failed to get VirtualProtect address");
-        return 0;
+        fuk("Failed to get VirtualProtect address"); return 0;
     }norm(GREEN"\t[DONE]");
 
     fn.MyVirtualAlloc = (pVirtualAlloc)FindExportAddress(sLibs.hKERNELBASE, "VirtualAlloc");
     if(fn.MyVirtualAlloc == nullptr)
     {
-        fuk("Failed to get VirtualAlloc address");
-        return 0;        
+        fuk("Failed to get VirtualAlloc address"); return 0;        
     }norm(GREEN"\t[DONE]");
 
     fn.MyGetLastError = (pGetLastError)FindExportAddress(sLibs.hKERNELBASE, "GetLastError");
     if(fn.MyGetLastError == nullptr)
     {
-        fuk("Failed to get GetLastError address");
-        return 0;        
+        fuk("Failed to get GetLastError address"); return 0;        
     }norm(GREEN"\t[DONE]");
-    
-    norm(GREEN"\n///////////////////GetFunctions()///////////////////\n");
+
+    fn.MyGetStdHandle = (pGetStdHandle)FindExportAddress(sLibs.hKERNELBASE, "GetStdHandle");
+    if(fn.MyGetStdHandle == nullptr)
+    {
+        fuk("Failed to get MyGetStdHandle address"); return 0;        
+    }norm(GREEN"\t[DONE]");
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    norm(GREEN"\n///////////////////GetFunctions()///////////////////\n");
     return 1;
 }
 
@@ -579,7 +587,7 @@ void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
 
     // Ensure memory is executable
     DWORD oldProtect;
-    if (fn.MyVirtualProtect(pSyscallPool, stubOffset, 0x20, &oldProtect))
+    if (!fn.MyVirtualProtect(pSyscallPool, stubOffset, 0x20, &oldProtect))
     {
         fuk("Failed to set RX permissions for syscall stubs. -> ", fn.MyGetLastError());
         return (void*)(~0ull);
@@ -640,7 +648,8 @@ void InitUnicodeString(UNICODE_STRING& u, const wchar_t* s)
 
 int main()
 {
-    srand(static_cast<unsigned>(time(nullptr)));
+    //srand(static_cast<unsigned>(time(nullptr)));
+    
     const char* function_name;
     DWORD dSSN = 0;
     IO_STATUS_BLOCK ioStatusBlock = {};
@@ -692,8 +701,8 @@ int main()
     char buffer[] = "!!!!Hello from NtWriteFile syscall!!!\n";
     ULONG length = sizeof(buffer) - 1;
 
-    void* status = SysFunction("NtWriteFile", ((DWORD)-11), nullptr, nullptr, nullptr, &ioStatusBlock, buffer, length, nullptr, nullptr);
 
+    void* status = SysFunction("NtWriteFile", fn.MyGetStdHandle(((DWORD)-11)), nullptr, nullptr, nullptr, &ioStatusBlock, buffer, length, nullptr, nullptr);
     if(status == (void*)(~0ull))
     {
         fuk("SysFunction failed\n");
@@ -703,9 +712,8 @@ int main()
     if((NTSTATUS)uintptr_t(status) == 0) ok("NtWriteFile call successful!");
     else
     {
-        fuk("NtWriteFile call failed!\n");
+        fuk("NtWriteFile call failed!",", Status; 0x", std::hex, status);
         return 1;
-        fuk("Status; 0x", std::hex, status,  "\n");
     }
 
     norm(YELLOW"\n==============================================\n");
@@ -750,8 +758,6 @@ int main()
     #if DEBUG_FILE
         details::close_log_file();
     #endif
-
-    norm("\n");ok("BYE");
     return 0;
 }
 
