@@ -15,7 +15,7 @@
 */
 
 #define LEAN_AND_MEAN
-#define DEBUG 0
+#define DEBUG 1
 #define DEBUG_FILE 0
 #define DEBUG_VECTOR 0
 
@@ -67,7 +67,8 @@ struct Sys_stb
 
 struct _LIBS
 {
-    HMODULE hNtdll;
+    HMODULE hHookedNtdll;
+    HMODULE hUnhookedNtdll;
     HMODULE hKERNEL32;
     HMODULE hKERNELBASE;
     HMODULE hUsr32;
@@ -84,7 +85,7 @@ _MY_FUNCTIONS fn;
 
 BYTE* pSyscallPool = nullptr;
 size_t stubCount = 0, stubOffset = 0;
-HMODULE hNtdll = nullptr;
+HMODULE hHookedNtdll = nullptr;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -134,7 +135,7 @@ int GetFunctions()
 
             if (_wcsicmp(fileName.c_str(), obf_Ker_32) == 0) sLibs.hKERNEL32 = (HMODULE)entry->DllBase;
             else if (_wcsicmp(fileName.c_str(), obf_KerB) == 0) sLibs.hKERNELBASE = (HMODULE)entry->DllBase;
-            else if (_wcsicmp(fileName.c_str(), obf_Ntd_32) == 0) sLibs.hNtdll    = (HMODULE)entry->DllBase;
+            else if (_wcsicmp(fileName.c_str(), obf_Ntd_32) == 0) sLibs.hHookedNtdll    = (HMODULE)entry->DllBase;
         }
         current = current->Flink;
     }
@@ -147,19 +148,19 @@ int GetFunctions()
     //=======================================================================
     // norm(YELLOW"\n======================================================");
     #if DEBUG
-        printf("\nNTDLL : " CYAN"0x%p" RESET"", sLibs.hNtdll); 
+        printf("\nNTDLL : " CYAN"0x%p" RESET"", sLibs.hHookedNtdll); 
         printf("\nKernel32 : " CYAN"0x%p" RESET"", sLibs.hKERNEL32);
         printf("\nKernelBASE32 : " CYAN"0x%p" RESET"", sLibs.hKERNELBASE);
     #endif
     norm(YELLOW"\n======================================================");
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    if(sLibs.hKERNEL32 == 0 || sLibs.hNtdll == 0)
+    if(sLibs.hKERNEL32 == 0 || sLibs.hHookedNtdll == 0)
     {
         norm("\n");fuk("Problems with Dlls");
         return 0;
     }
-    norm("\nNTDLL DOS Header Magic: ", ((IMAGE_DOS_HEADER*)sLibs.hNtdll)->e_magic == 0x5A4D ? GREEN"MZ" : RED"Invalid", "\n");
+    norm("\nNTDLL DOS Header Magic: ", ((IMAGE_DOS_HEADER*)sLibs.hHookedNtdll)->e_magic == 0x5A4D ? GREEN"MZ" : RED"Invalid", "\n");
     norm("KERNEL32 DOS Header Magic: ", ((IMAGE_DOS_HEADER*)sLibs.hKERNEL32)->e_magic == 0x5A4D ? GREEN"MZ" : RED"Invalid", "\n");
     norm("KERNELBASE DOS Header Magic: ", ((IMAGE_DOS_HEADER*)sLibs.hKERNELBASE)->e_magic == 0x5A4D ? GREEN"MZ" : RED"Invalid", "\n");
     norm(YELLOW"======================================================");
@@ -524,10 +525,10 @@ void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
 
     for(size_t j = 0; j < NumberOfElements; ++j)
     {
-        void* vpfunction = FindExportAddress(sLibs.hNtdll, sEntry[j].function_name);
+        void* vpfunction = FindExportAddress(sLibs.hHookedNtdll, sEntry[j].function_name);
         if(!vpfunction)
         {
-            fuk("Couldn't find the function\n");
+            fuk("Couldn't find the function"); norm("\n");
             return (void*)(~0ull);
         }
 
@@ -665,6 +666,7 @@ int main()
     size_t numSyscalls = 0;
     syscallEntries[numSyscalls++] = {"NtWriteFile", 0, 0, nullptr, nullptr};
     syscallEntries[numSyscalls++] = {"NtCreateFile", 0, 0, nullptr, nullptr};
+    //syscallEntries[numSyscalls++] = {"GetCurrentDirectoryW", 0, 0, nullptr, nullptr};             not a Syscall fn, will call other
     // syscallEntries[numSyscalls++] = {"NtWriteVirtualMemory", 0, nullptr, nullptr};
     
     AddStubToPool(syscallEntries, numSyscalls);
@@ -717,7 +719,7 @@ int main()
     }
 
     norm(YELLOW"\n==============================================\n");
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // HANDLE fileHandle = nullptr;
     // UNICODE_STRING fileName;
@@ -726,7 +728,16 @@ int main()
     // // Create full path with windows prefix
     // WCHAR filePath[260] = L"\\??\\";
     // WCHAR currentDir[260];
-    // GetCurrentDirectoryW(260, currentDir);
+
+    // ok("!!!");
+    // status = SysFunction("GetCurrentDirectoryW", 260, currentDir);                       //trying to get GetCurrentDirectoryW via my syscall
+    // if(status == (void*)(~0ull))
+    // {
+    //     fuk("SysFunction failed\n");
+    //     return 1;
+    // }
+    // ok("@@@");
+    // // GetCurrentDirectoryW(260, currentDir);
     // wcscat_s(filePath, 260, currentDir);
     // wcscat_s(filePath, 260, L"\\testfile.txt");
     
@@ -752,7 +763,7 @@ int main()
     // ok("File created successfully");
 
     // norm(YELLOW"\n==============================================\n");
-//     //////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     norm("DONE :)\n");
     #if DEBUG_FILE
@@ -784,7 +795,7 @@ void* FindExportAddress(HMODULE hModule, const char* funcName)
     if (dir.VirtualAddress == 0){ fuk("Optional header issue"); return nullptr; }
 
     // printf("\nExportDir VA: 0x%X, Size: 0x%X", dir.VirtualAddress, dir.Size);
-    norm("\n");warn("Trying to resolve ",YELLOW"", funcName);
+    norm("\n");warn("Trying to resolve ",YELLOW"", funcName);norm("\n");
 
     IMAGE_EXPORT_DIRECTORY* exp = (IMAGE_EXPORT_DIRECTORY*)(base + dir.VirtualAddress);
     DWORD* nameRVAs = (DWORD*)(base + exp->AddressOfNames);
@@ -805,7 +816,6 @@ void* FindExportAddress(HMODULE hModule, const char* funcName)
                 fuk("Forwarded export: ", funcName);
                 return nullptr;
             }
-
             return (void*)addr;
         }
     }
