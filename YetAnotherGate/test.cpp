@@ -89,9 +89,9 @@ HMODULE hHookedNtdll = nullptr;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int GetFunctions()
+int GetHookedFunctions()
 {
-    norm(GREEN"\n///////////////////GetFunctions()///////////////////");
+    norm(GREEN"\n///////////////////GetHookedFunctions()///////////////////");
 
     HMODULE kernel32Base = NULL;
     HMODULE ntdllBase = NULL;
@@ -199,7 +199,18 @@ int GetFunctions()
     }norm(GREEN"\t[DONE]");
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    norm(GREEN"\n///////////////////GetFunctions()///////////////////\n");
+    norm(GREEN"\n///////////////////GetHookedFunctions()///////////////////\n");
+    return 1;
+}
+
+int GetUnhookedDlls()
+{
+    norm(GREEN"\n///////////////////GetUnhookedFunctions()///////////////////");
+
+
+
+
+    norm(GREEN"\n///////////////////GetUnhookedFunctions()///////////////////");
     return 1;
 }
 
@@ -655,10 +666,9 @@ int main()
     DWORD dSSN = 0;
     IO_STATUS_BLOCK ioStatusBlock = {};
 
-    if(!GetFunctions())
-    {
-        return 1;
-    }
+    if(!GetHookedFunctions()) return 1;
+    if(!GetUnhookedDlls()) return 1;
+    else { ok("Bye"); return 0; }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     pSyscallPool = static_cast<BYTE*>(fn.MyVirtualAlloc(nullptr, MAX_SYSCALLS * 0x40, 0x00001000 | 0x00002000, 0x40));
@@ -795,7 +805,7 @@ void* FindExportAddress(HMODULE hModule, const char* funcName)
     if (dir.VirtualAddress == 0){ fuk("Optional header issue"); return nullptr; }
 
     // printf("\nExportDir VA: 0x%X, Size: 0x%X", dir.VirtualAddress, dir.Size);
-    norm("\n");warn("Trying to resolve ",YELLOW"", funcName);norm("\n");
+    warn("Trying to resolve ",YELLOW"", funcName);
 
     IMAGE_EXPORT_DIRECTORY* exp = (IMAGE_EXPORT_DIRECTORY*)(base + dir.VirtualAddress);
     DWORD* nameRVAs = (DWORD*)(base + exp->AddressOfNames);

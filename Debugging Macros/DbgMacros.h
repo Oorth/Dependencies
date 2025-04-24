@@ -65,9 +65,9 @@
         #define CYAN "\033[96m"
         #define RESET "\033[0m"
 
-        #define ok(...) details::log(GREEN " [+] ", ##__VA_ARGS__)
-        #define fuk(...) details::log(RED " [!] ", ##__VA_ARGS__, " [!] ")
-        #define warn(...) details::log(YELLOW " [o] ", ##__VA_ARGS__)
+        #define ok(...) details::log(GREEN "\n [+] ", ##__VA_ARGS__)
+        #define fuk(...) details::log(RED "\n [!] ", ##__VA_ARGS__, " [!] ")
+        #define warn(...) details::log(YELLOW "\n [o] ", ##__VA_ARGS__)
         #define norm(...) details::log("", ##__VA_ARGS__)
     #else
         #define ok(...)
