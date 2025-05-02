@@ -69,7 +69,9 @@ ideas are welcomed..
 Currently using methods to get clean unhooked ntdll.dll ->
     1) KnownDlls
     2) Blind Side [Need to code]
-    3) VEH [Exploring]
+    3) Guard Page fault and VEH [Exploring]
+        -> Guard page fault seeme like higher probability if getting flagged they, generate conspicuous exception and ETW events that many EDRs will flag, especially when placed on system-image regions [https://redops.at/en/blog/edr-analysis-leveraging-fake-dlls-guard-pages-and-veh-for-enhanced-detection]
+        Some EDRs Load fake ntdll.dll and KERNEL32.dll before the original ones..... and make an vectored exception handler
 
 ## The End
 So people have fun stay safe, If you have further ideas go on I am all ears.

