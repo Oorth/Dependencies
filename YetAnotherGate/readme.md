@@ -67,7 +67,7 @@ I ASSUME WE HAVE A CLEAN UNHOOKED NTDLL.DLL, WORKING ON WAYS TO GET THE UNHOOKED
 ideas are welcomed..
 
 Currently using methods to get clean unhooked ntdll.dll ->
-    1) KnownDlls
+    1) KnownDlls  [Done as a Fallback]
     2) Blind Side [Need to code]
     3) Guard Page fault and VEH [Exploring]
         -> Guard page fault seeme like higher probability if getting flagged they, generate conspicuous exception and ETW events that many EDRs will flag, especially when placed on system-image regions [https://redops.at/en/blog/edr-analysis-leveraging-fake-dlls-guard-pages-and-veh-for-enhanced-detection]
