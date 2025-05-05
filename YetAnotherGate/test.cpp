@@ -120,20 +120,20 @@ int GetHookedFunctions()
     
     //=======================================================================
     //norm(YELLOW"\n======================================================");
-    for (int i = 0; obf_Ntd_32[i] != '\0'; i++) obf_Ntd_32[i] ^= HEX_K;
-    for (int i = 0; obf_Ker_32[i] != '\0'; i++) obf_Ker_32[i] ^= HEX_K;
-    for (int i = 0; obf_KerB[i] != '\0'; i++) obf_KerB[i] ^= HEX_K;
-    for (int i = 0; obf_Usr_32[i] != '\0'; i++) obf_Usr_32[i] ^= HEX_K;
+    for(int i = 0; obf_Ntd_32[i] != '\0'; ++i) obf_Ntd_32[i] ^= HEX_K;
+    for(int i = 0; obf_Ker_32[i] != '\0'; ++i) obf_Ker_32[i] ^= HEX_K;
+    for(int i = 0; obf_KerB[i] != '\0'; ++i) obf_KerB[i] ^= HEX_K;
+    for(int i = 0; obf_Usr_32[i] != '\0'; ++i) obf_Usr_32[i] ^= HEX_K;
     
-    auto head    = &pLdr->InLoadOrderModuleList;
+    auto head = &pLdr->InLoadOrderModuleList;
     auto current = head->Flink;    // first entry is the EXE itself
     
     // walk load‑order
-    while (current != head)
+    while(current != head)
     {
         auto entry = CONTAINING_RECORD(current, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
 
-        if (entry->BaseDllName.Buffer)
+        if(entry->BaseDllName.Buffer)
         {
             int len = entry->BaseDllName.Length / sizeof(WCHAR);
             std::wstring name(entry->BaseDllName.Buffer, len);
@@ -144,17 +144,17 @@ int GetHookedFunctions()
 
             // wprintf(L"\n[DEBUG] Scanned Module: %ls", fileName.c_str());
 
-            if (_wcsicmp(fileName.c_str(), obf_Ker_32) == 0) sLibs.hKERNEL32 = (HMODULE)entry->DllBase;
-            else if (_wcsicmp(fileName.c_str(), obf_KerB) == 0) sLibs.hKERNELBASE = (HMODULE)entry->DllBase;
-            else if (_wcsicmp(fileName.c_str(), obf_Ntd_32) == 0) sLibs.hHookedNtdll    = (HMODULE)entry->DllBase;
+            if(_wcsicmp(fileName.c_str(), obf_Ker_32) == 0) sLibs.hKERNEL32 = (HMODULE)entry->DllBase;
+            else if(_wcsicmp(fileName.c_str(), obf_KerB) == 0) sLibs.hKERNELBASE = (HMODULE)entry->DllBase;
+            else if(_wcsicmp(fileName.c_str(), obf_Ntd_32) == 0) sLibs.hHookedNtdll    = (HMODULE)entry->DllBase;
         }
         current = current->Flink;
     }
 
-    for (size_t i = 0; i < wcslen(obf_Ntd_32); i++) obf_Ntd_32[i] = 0;
-    for (size_t i = 0; i < wcslen(obf_Ker_32); i++) obf_Ker_32[i] = 0;
-    for (size_t i = 0; i < wcslen(obf_KerB); i++) obf_KerB[i] = 0;
-    for (size_t i = 0; i < wcslen(obf_Usr_32); i++) obf_Usr_32[i] = 0;
+    for(size_t i = 0; i < wcslen(obf_Ntd_32); ++i) obf_Ntd_32[i] = 0;
+    for(size_t i = 0; i < wcslen(obf_Ker_32); ++i) obf_Ker_32[i] = 0;
+    for(size_t i = 0; i < wcslen(obf_KerB); ++i) obf_KerB[i] = 0;
+    for(size_t i = 0; i < wcslen(obf_Usr_32); ++i) obf_Usr_32[i] = 0;
 
     //=======================================================================
     // norm(YELLOW"\n======================================================");
@@ -176,7 +176,7 @@ int GetHookedFunctions()
     norm("KERNELBASE DOS Header Magic: ", ((IMAGE_DOS_HEADER*)sLibs.hKERNELBASE)->e_magic == 0x5A4D ? GREEN"MZ" : RED"Invalid", "\n");
     norm(YELLOW"======================================================");
     
-    if (!sLibs.hKERNELBASE)
+    if(!sLibs.hKERNELBASE)
     {
         fuk("hKERNELBASE is null! You never found it in PEB walk!");
         return 0;
@@ -238,9 +238,16 @@ int GetHookedFunctions()
     return 1;
 }
 
-NTSTATUS GetUnhookedDlls()
+NTSTATUS GetUnhookedDlls_BlindSide()
 {
-    norm("\n----------------------GetUnhookedDlls()----------------------");
+
+    return 1;
+}
+
+NTSTATUS GetUnhookedDlls_KnownDlls()
+{
+    // I hate this method
+    norm("\n----------------------GetUnhookedDlls_KnownDlls()----------------------");
 
     UNICODE_STRING usName;
     OBJECT_ATTRIBUTES objAttr;
@@ -251,19 +258,17 @@ NTSTATUS GetUnhookedDlls()
     InitUnicodeString(usName, L"\\KnownDlls\\ntdll.dll");
     InitializeObjectAttributes(&objAttr, &usName, OBJ_CASE_INSENSITIVE, nullptr, nullptr);
 
-    // 2) Open the section
     NTSTATUS status = fn.MyNtOpenSection(&hSection, SECTION_MAP_EXECUTE | SECTION_MAP_READ, &objAttr);
 
-    if (!NT_SUCCESS(status))
+    if(!NT_SUCCESS(status))
     {
         fuk("NtOpenSection failed: 0x%X", status);
         return 0;
     }
 
-    // 3) Map the section into our process
     status = fn.MyNtMapViewOfSection(hSection, fn.MyGetCurrentProcess(), &base, 0, 0, nullptr, &viewSize, ViewShare, 0, PAGE_EXECUTE_READ);
     
-    if (!NT_SUCCESS(status))
+    if(!NT_SUCCESS(status))
     {
         fuk("MyNtMapViewOfSection Failed");
         return 0;
@@ -276,7 +281,7 @@ NTSTATUS GetUnhookedDlls()
 
     if(!updateFunctions()) { fuk("MyNtMapViewOfSection Failed"); return 0; }
 
-    norm("\n----------------------GetUnhookedDlls()----------------------");
+    norm("\n----------------------GetUnhookedDlls_KnownDlls()----------------------");
     return 1;
 }
 
@@ -692,7 +697,7 @@ void* AddStubToPool(Sys_stb* sEntry, size_t NumberOfElements)
 
     // Ensure memory is executable
     DWORD oldProtect;
-    if (!fn.MyVirtualProtect(pSyscallPool, stubOffset, 0x20, &oldProtect))
+    if(!fn.MyVirtualProtect(pSyscallPool, stubOffset, 0x20, &oldProtect))
     {
         fuk("Failed to set RX permissions for syscall stubs. -> ", fn.MyGetLastError());
         return (void*)(~0ull);
@@ -714,7 +719,7 @@ void* SysFunction(const char* function_name, ...)
             break;
         }
     }
-    if (!pExecMem)
+    if(!pExecMem)
     {
         fuk("Syscall not found: ", function_name);
         return (void*)(~0ull);
@@ -760,7 +765,7 @@ int main()
     IO_STATUS_BLOCK ioStatusBlock = {};
 
     if(!GetHookedFunctions()) return 1;
-    if(!GetUnhookedDlls()) return 1;
+    if(!GetUnhookedDlls_KnownDlls()) return 1;
     // else { ok("Bye"); return 0; }
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -790,7 +795,7 @@ int main()
         norm("\nSyscall Pool Contents:");
         for (int i = 0; i < SIZE_OF_SYSCALL_CODE * numSyscalls; ++i)
         {
-            if (i % 16 == 0)
+            if(i % 16 == 0)
             {
                 BYTE* addr = pSyscallPool + i;
                 std::cout << YELLOW"\n" << "0x" << std::hex << std::setw(4) << std::setfill('0') << (void*)addr << CYAN": ";
@@ -877,7 +882,7 @@ int main()
 
 void* FindExportAddress(HMODULE hModule, const char* funcName)
 {
-    if (!hModule || !funcName) return nullptr;
+    if(!hModule || !funcName) return nullptr;
 
     BYTE* base = (BYTE*)hModule;
     IMAGE_DOS_HEADER* dos = (IMAGE_DOS_HEADER*)base;
@@ -889,13 +894,13 @@ void* FindExportAddress(HMODULE hModule, const char* funcName)
 
     base = (BYTE*)hModule;
     dos = (IMAGE_DOS_HEADER*)base;
-    if (dos->e_magic != IMAGE_DOS_SIGNATURE){ fuk("Magic did not match"); return nullptr; }
+    if(dos->e_magic != IMAGE_DOS_SIGNATURE){ fuk("Magic did not match"); return nullptr; }
 
     IMAGE_NT_HEADERS* nt = (IMAGE_NT_HEADERS*)(base + dos->e_lfanew);
-    if (nt->Signature != IMAGE_NT_SIGNATURE){ fuk("NT signature did not match"); return nullptr; }
+    if(nt->Signature != IMAGE_NT_SIGNATURE){ fuk("NT signature did not match"); return nullptr; }
 
     auto& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
-    if (dir.VirtualAddress == 0){ fuk("Optional header issue"); return nullptr; }
+    if(dir.VirtualAddress == 0){ fuk("Optional header issue"); return nullptr; }
 
     // printf("\nExportDir VA: 0x%X, Size: 0x%X", dir.VirtualAddress, dir.Size);
     warn("Trying to resolve ",YELLOW"", funcName);
@@ -908,13 +913,13 @@ void* FindExportAddress(HMODULE hModule, const char* funcName)
     for (DWORD i = 0; i < exp->NumberOfNames; ++i)
     {
         char* name = (char*)(base + nameRVAs[i]);
-        if (_stricmp(name, funcName) == 0)
+        if(_stricmp(name, funcName) == 0)
         {
             DWORD funcRVA = functions[ordinals[i]];
             BYTE* addr = base + funcRVA;
 
             // Forwarded export check
-            if (funcRVA >= dir.VirtualAddress && funcRVA < dir.VirtualAddress + dir.Size)
+            if(funcRVA >= dir.VirtualAddress && funcRVA < dir.VirtualAddress + dir.Size)
             {
                 fuk("Forwarded export: ", funcName);
                 return nullptr;

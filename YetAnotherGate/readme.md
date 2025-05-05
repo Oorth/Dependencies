@@ -72,6 +72,11 @@ Currently using methods to get clean unhooked ntdll.dll ->
     3) Guard Page fault and VEH [Exploring]
         -> Guard page fault seeme like higher probability if getting flagged they, generate conspicuous exception and ETW events that many EDRs will flag, especially when placed on system-image regions [https://redops.at/en/blog/edr-analysis-leveraging-fake-dlls-guard-pages-and-veh-for-enhanced-detection]
         Some EDRs Load fake ntdll.dll and KERNEL32.dll before the original ones..... and make an vectored exception handler
+    4) Single-Step Tracing (FireWalker) ->
+        A more general (but heavy) method is to single-step through the hooked function and recover its original code on the fly. The FireWalker technique, for example, sets the
+        CPU’s trap flag so that the processor generates an exception after each instruction, and installs a VEH to catch each trap. The handler inspects the next instruction(s) of 
+        the target function: if it sees a jump (the inline hook) or other hook sequence, it follows it and keeps single-stepping until it finds the untouched syscall stub.
+
 
 ## The End
 So people have fun stay safe, If you have further ideas go on I am all ears.
