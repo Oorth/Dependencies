@@ -80,15 +80,15 @@
         namespace details
         {
             #if DEBUG_VECTOR
-                std::vector<std::string> logged_messages;
+                inline std::vector<std::string> logged_messages;
             #endif
 
             #if DEBUG_FILE
-                std::ofstream log_output_file;
-                bool log_file_opened = false;
+                inline std::ofstream log_output_file;
+                inline bool log_file_opened = false;
                 const char* log_file_name = "app.log";
 
-                void open_log_file()
+                inline void open_log_file()
                 {
                     if (!log_file_opened)
                     {
@@ -98,7 +98,7 @@
                     }
                 }
 
-                void close_log_file()
+                inline void close_log_file()
                 {
                     if (log_file_opened)
                     {
@@ -109,7 +109,7 @@
 
             #endif
 
-            void log_arg(std::ostream& os){ os << RESET; }
+            inline void log_arg(std::ostream& os){ os << RESET; }
 
             template <typename T, typename... Args>
             void log_arg(std::ostream& os, const T& arg, Args... args)
@@ -118,7 +118,7 @@
                 log_arg(os, args...);
             }
 
-            void log_arg(std::ostream& os, std::ostream& (*manip)(std::ostream&)) { manip(os); }
+            inline void log_arg(std::ostream& os, std::ostream& (*manip)(std::ostream&)) { manip(os); }
 
             // Added this overload back
             template <typename... Args>
